@@ -7,7 +7,6 @@ import {
   FileText,
   Users,
   Settings,
-  Bell,
   ChevronLeft,
   ChevronRight,
   Sparkles,
@@ -20,7 +19,6 @@ const navItems = [
   { title: "Invoice History", path: "/invoice-history", icon: FileText },
   { title: "Members", path: "/members", icon: Users },
   { title: "Email & AI Settings", path: "/settings", icon: Settings },
-  { title: "Alerts & Automation", path: "/alerts", icon: Bell },
 ];
 
 export function AppSidebar() {
