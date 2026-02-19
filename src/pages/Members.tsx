@@ -1,44 +1,50 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Users, X } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { X } from "lucide-react";
 
 const members = [
-  { id: 1, name: "John Carter", invoicesSent: 42, revenue: 52400 },
-  { id: 2, name: "Sarah Chen", invoicesSent: 38, revenue: 46800 },
-  { id: 3, name: "Mike Ross", invoicesSent: 35, revenue: 41200 },
-  { id: 4, name: "Emily Watson", invoicesSent: 28, revenue: 32100 },
-  { id: 5, name: "David Kim", invoicesSent: 13, revenue: 18500 },
+  { id: 1, name: "John Carter", revenue: 52400 },
+  { id: 2, name: "Sarah Chen", revenue: 46800 },
+  { id: 3, name: "Mike Ross", revenue: 41200 },
+  { id: 4, name: "Emily Watson", revenue: 32100 },
+  { id: 5, name: "David Kim", revenue: 18500 },
 ];
 
-const memberDetails: Record<number, { companies: Array<{ name: string; revenue: number }>; invoices: Array<{ id: string; company: string; amount: string; date: string }> }> = {
+const memberDetails: Record<number, { companies: Array<{ name: string; rent: number }> }> = {
   1: {
     companies: [
-      { name: "Apex Logistics", revenue: 18500 },
-      { name: "CargoHub Inc.", revenue: 15200 },
-      { name: "FrostCold Logistics", revenue: 10200 },
-      { name: "Others", revenue: 8500 },
-    ],
-    invoices: [
-      { id: "INV-2024-156", company: "Apex Logistics", amount: "$4,200", date: "Feb 18, 2026" },
-      { id: "INV-2024-154", company: "CargoHub Inc.", amount: "$5,100", date: "Feb 16, 2026" },
-      { id: "INV-2024-151", company: "FrostCold Logistics", amount: "$8,500", date: "Feb 13, 2026" },
+      { name: "Apex Logistics", rent: 18500 },
+      { name: "CargoHub Inc.", rent: 15200 },
+      { name: "FrostCold Logistics", rent: 10200 },
+      { name: "Delta Freight", rent: 8500 },
     ],
   },
   2: {
     companies: [
-      { name: "BlueLine Storage", revenue: 22000 },
-      { name: "EastPort Shipping", revenue: 14800 },
-      { name: "Others", revenue: 10000 },
+      { name: "BlueLine Storage", rent: 22000 },
+      { name: "EastPort Shipping", rent: 14800 },
+      { name: "HarborPoint Storage", rent: 10000 },
     ],
-    invoices: [
-      { id: "INV-2024-155", company: "BlueLine Storage", amount: "$3,800", date: "Feb 17, 2026" },
-      { id: "INV-2024-152", company: "EastPort Shipping", amount: "$3,400", date: "Feb 14, 2026" },
+  },
+  3: {
+    companies: [
+      { name: "GlobalWare Solutions", rent: 22000 },
+      { name: "Apex Logistics", rent: 19200 },
+    ],
+  },
+  4: {
+    companies: [
+      { name: "CargoHub Inc.", rent: 18100 },
+      { name: "Delta Freight", rent: 14000 },
+    ],
+  },
+  5: {
+    companies: [
+      { name: "FrostCold Logistics", rent: 10000 },
+      { name: "EastPort Shipping", rent: 8500 },
     ],
   },
 };
-
-const COLORS = ["hsl(217, 71%, 45%)", "hsl(152, 55%, 42%)", "hsl(38, 92%, 50%)", "hsl(280, 60%, 55%)"];
 
 export default function Members() {
   const [selectedMember, setSelectedMember] = useState<number | null>(null);
@@ -62,7 +68,6 @@ export default function Members() {
                 <thead>
                   <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
                     <th className="px-6 py-3.5 font-medium">Member</th>
-                    <th className="px-6 py-3.5 font-medium">Invoices Sent</th>
                     <th className="px-6 py-3.5 font-medium">Total Revenue</th>
                   </tr>
                 </thead>
@@ -81,7 +86,6 @@ export default function Members() {
                         </div>
                         {m.name}
                       </td>
-                      <td className="px-6 py-4 text-card-foreground">{m.invoicesSent}</td>
                       <td className="px-6 py-4 font-semibold text-card-foreground">${m.revenue.toLocaleString()}</td>
                     </tr>
                   ))}
@@ -105,42 +109,14 @@ export default function Members() {
                 <p className="text-2xl font-bold text-card-foreground">${member?.revenue.toLocaleString()}</p>
               </div>
 
-              {/* Pie chart */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-card-foreground mb-3">Revenue Distribution</h4>
-                <div className="h-[180px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={detail.companies} dataKey="revenue" nameKey="name" cx="50%" cy="50%" outerRadius={70} strokeWidth={2}>
-                        {detail.companies.map((_, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex flex-wrap gap-3 mt-2">
-                  {detail.companies.map((c, i) => (
-                    <div key={c.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                      {c.name}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recent invoices */}
+              {/* Company-wise rent breakdown */}
               <div>
-                <h4 className="text-sm font-semibold text-card-foreground mb-3">Recent Invoices</h4>
+                <h4 className="text-sm font-semibold text-card-foreground mb-3">Company-wise Rent</h4>
                 <div className="space-y-2">
-                  {detail.invoices.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 text-sm">
-                      <div>
-                        <p className="font-medium text-card-foreground">{inv.id}</p>
-                        <p className="text-xs text-muted-foreground">{inv.company} · {inv.date}</p>
-                      </div>
-                      <span className="font-semibold text-card-foreground">{inv.amount}</span>
+                  {detail.companies.map((c) => (
+                    <div key={c.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 text-sm">
+                      <span className="font-medium text-card-foreground">{c.name}</span>
+                      <span className="font-semibold text-card-foreground">${c.rent.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
