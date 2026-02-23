@@ -37,7 +37,7 @@ const Index = () => {
   const invoicesSent = invoices.filter((i) => i.status === "Sent").length;
 
   const kpis = [
-    { label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, icon: DollarSign },
+    { label: "Total Revenue", value: `₹${totalRevenue.toLocaleString("en-IN")}`, icon: DollarSign },
     { label: "Total Companies", value: String(totalCompanies), icon: Building2 },
     { label: "Invoices Sent", value: String(invoicesSent), icon: Send },
   ];
@@ -114,8 +114,8 @@ const Index = () => {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 90%)" />
                     <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 50%)" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 50%)" tickFormatter={(v) => `$${v / 1000}k`} />
-                    <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]} />
+                    <YAxis tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 50%)" tickFormatter={(v) => `₹${(v / 1000).toLocaleString("en-IN")}k`} />
+                    <Tooltip formatter={(value: number) => [`₹${value.toLocaleString("en-IN")}`, "Revenue"]} />
                     <Area type="monotone" dataKey="revenue" stroke="hsl(217, 71%, 45%)" strokeWidth={2} fill="url(#revenueGrad)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -139,7 +139,7 @@ const Index = () => {
                     </span>
                     <span className="text-sm font-medium text-card-foreground">{c.name}</span>
                   </div>
-                  <span className="text-sm font-semibold text-card-foreground">${c.revenue.toLocaleString()}</span>
+                  <span className="text-sm font-semibold text-card-foreground">₹{c.revenue.toLocaleString("en-IN")}</span>
                 </div>
               )) : (
                 <p className="text-sm text-muted-foreground">No data yet.</p>

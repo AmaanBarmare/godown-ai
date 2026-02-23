@@ -47,7 +47,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are an invoice data extractor. Extract the company name and invoice amount from the provided invoice document. You MUST call the extract_invoice_data function with the results.`,
+            content: `You are an invoice data extractor. Extract the company name and invoice amount from the provided invoice document. The currency is INR (₹). You MUST call the extract_invoice_data function with the results.`,
           },
           {
             role: "user",
@@ -73,7 +73,7 @@ serve(async (req) => {
                 type: "object",
                 properties: {
                   company: { type: "string", description: "The company name being billed" },
-                  amount: { type: "string", description: "The total invoice amount including currency symbol, e.g. $4,200.00" },
+                  amount: { type: "string", description: "The total invoice amount including currency symbol, e.g. ₹4,200.00" },
                   date: { type: "string", description: "The invoice date, e.g. Feb 19, 2026" },
                 },
                 required: ["company", "amount"],

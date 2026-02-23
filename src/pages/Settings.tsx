@@ -15,8 +15,8 @@ const emailSchema = z.string().email("Invalid email address").max(255).or(z.lite
 const mappingSchema = z.object({
   company: z.string().trim().min(1, "Company name is required").max(100),
   primary_email: z.string().trim().min(1, "Primary email is required").email("Invalid email address").max(255),
-  cc: emailSchema,
-  bcc: emailSchema,
+  cc: emailSchema.default(""),
+  bcc: emailSchema.default(""),
 });
 
 type MappingFormData = z.infer<typeof mappingSchema>;
@@ -137,12 +137,13 @@ export default function SettingsPage() {
 
   const handleSave = async (data: MappingFormData) => {
     try {
+      const payload = { company: data.company, primary_email: data.primary_email, cc: data.cc ?? "", bcc: data.bcc ?? "" };
       if (editingMapping) {
-        await updateMapping.mutateAsync({ id: editingMapping.id, ...data });
-        toast({ title: "Mapping updated", description: `Email mapping for ${data.company} has been updated.` });
+        await updateMapping.mutateAsync({ id: editingMapping.id, ...payload });
+        toast({ title: "Mapping updated", description: `Email mapping for ${payload.company} has been updated.` });
       } else {
-        await addMapping.mutateAsync(data);
-        toast({ title: "Mapping added", description: `Email mapping for ${data.company} has been added.` });
+        await addMapping.mutateAsync(payload);
+        toast({ title: "Mapping added", description: `Email mapping for ${payload.company} has been added.` });
       }
       setModalOpen(false);
       setEditingMapping(null);
