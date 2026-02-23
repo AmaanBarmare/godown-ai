@@ -3,26 +3,18 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Mail, FileText, Plus, Pencil, Trash2, X } from "lucide-react";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-
-interface EmailMapping {
-  company: string;
-  primary: string;
-  cc: string;
-  bcc: string;
-}
-
-const initialMappings: EmailMapping[] = [
-  { company: "Apex Logistics", primary: "billing@apexlogistics.com", cc: "manager@apexlogistics.com", bcc: "" },
-  { company: "BlueLine Storage", primary: "accounts@bluelinestorage.com", cc: "", bcc: "admin@bluelinestorage.com" },
-  { company: "CargoHub Inc.", primary: "finance@cargohub.com", cc: "ops@cargohub.com", bcc: "" },
-  { company: "Delta Freight", primary: "pay@deltafreight.com", cc: "", bcc: "" },
-  { company: "EastPort Shipping", primary: "billing@eastport.com", cc: "cfo@eastport.com", bcc: "" },
-];
+import {
+  useEmailMappings,
+  useAddEmailMapping,
+  useUpdateEmailMapping,
+  useDeleteEmailMapping,
+  type EmailMapping,
+} from "@/hooks/use-email-mappings";
 
 const emailSchema = z.string().email("Invalid email address").max(255).or(z.literal(""));
 const mappingSchema = z.object({
   company: z.string().trim().min(1, "Company name is required").max(100),
-  primary: z.string().trim().min(1, "Primary email is required").email("Invalid email address").max(255),
+  primary_email: z.string().trim().min(1, "Primary email is required").email("Invalid email address").max(255),
   cc: emailSchema,
   bcc: emailSchema,
 });
@@ -41,7 +33,9 @@ function EmailMappingModal({
   initial?: EmailMapping;
 }) {
   const [form, setForm] = useState<MappingFormData>(
-    initial ?? { company: "", primary: "", cc: "", bcc: "" }
+    initial
+      ? { company: initial.company, primary_email: initial.primary_email, cc: initial.cc, bcc: initial.bcc }
+      : { company: "", primary_email: "", cc: "", bcc: "" }
   );
   const [errors, setErrors] = useState<Partial<Record<keyof MappingFormData, string>>>({});
 
@@ -69,7 +63,7 @@ function EmailMappingModal({
 
   const fields: { key: keyof MappingFormData; label: string; required?: boolean }[] = [
     { key: "company", label: "Company Name", required: true },
-    { key: "primary", label: "Primary Email", required: true },
+    { key: "primary_email", label: "Primary Email", required: true },
     { key: "cc", label: "CC Email" },
     { key: "bcc", label: "BCC Email" },
   ];
@@ -122,43 +116,48 @@ function EmailMappingModal({
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"email" | "templates">("email");
-  const [mappings, setMappings] = useState<EmailMapping[]>(initialMappings);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingMapping, setEditingMapping] = useState<EmailMapping | null>(null);
   const { toast } = useToast();
 
+  const { data: mappings = [], isLoading } = useEmailMappings();
+  const addMapping = useAddEmailMapping();
+  const updateMapping = useUpdateEmailMapping();
+  const deleteMapping = useDeleteEmailMapping();
+
   const openAdd = () => {
-    setEditingIndex(null);
+    setEditingMapping(null);
     setModalOpen(true);
   };
 
-  const openEdit = (index: number) => {
-    setEditingIndex(index);
+  const openEdit = (mapping: EmailMapping) => {
+    setEditingMapping(mapping);
     setModalOpen(true);
   };
 
-  const handleSave = (data: MappingFormData) => {
-    const mapping: EmailMapping = {
-      company: data.company,
-      primary: data.primary,
-      cc: data.cc ?? "",
-      bcc: data.bcc ?? "",
-    };
-    if (editingIndex !== null) {
-      setMappings((prev) => prev.map((m, i) => (i === editingIndex ? mapping : m)));
-      toast({ title: "Mapping updated", description: `Email mapping for ${mapping.company} has been updated.` });
-    } else {
-      setMappings((prev) => [...prev, mapping]);
-      toast({ title: "Mapping added", description: `Email mapping for ${mapping.company} has been added.` });
+  const handleSave = async (data: MappingFormData) => {
+    try {
+      if (editingMapping) {
+        await updateMapping.mutateAsync({ id: editingMapping.id, ...data });
+        toast({ title: "Mapping updated", description: `Email mapping for ${data.company} has been updated.` });
+      } else {
+        await addMapping.mutateAsync(data);
+        toast({ title: "Mapping added", description: `Email mapping for ${data.company} has been added.` });
+      }
+      setModalOpen(false);
+      setEditingMapping(null);
+    } catch (e) {
+      toast({ title: "Error", description: e instanceof Error ? e.message : "Failed to save mapping", variant: "destructive" });
     }
-    setModalOpen(false);
-    setEditingIndex(null);
   };
 
-  const handleDelete = (index: number) => {
-    const name = mappings[index].company;
-    setMappings((prev) => prev.filter((_, i) => i !== index));
-    toast({ title: "Mapping deleted", description: `Email mapping for ${name} has been removed.` });
+  const handleDelete = async (mapping: EmailMapping) => {
+    try {
+      await deleteMapping.mutateAsync(mapping.id);
+      toast({ title: "Mapping deleted", description: `Email mapping for ${mapping.company} has been removed.` });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to delete mapping", variant: "destructive" });
+    }
   };
 
   return (
@@ -169,7 +168,6 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground mt-1">Configure invoice emailing</p>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-muted rounded-lg p-1 w-fit">
           {[
             { key: "email" as const, label: "Email Mapping", icon: Mail },
@@ -201,44 +199,48 @@ export default function SettingsPage() {
                 <Plus className="w-3.5 h-3.5" /> Add Mapping
               </button>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
-                  <th className="px-6 py-3 font-medium">Company</th>
-                  <th className="px-6 py-3 font-medium">Primary Email</th>
-                  <th className="px-6 py-3 font-medium">CC</th>
-                  <th className="px-6 py-3 font-medium">BCC</th>
-                  <th className="px-6 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mappings.map((m, i) => (
-                  <tr key={`${m.company}-${i}`} className="border-b border-border/50 last:border-0">
-                    <td className="px-6 py-3.5 font-medium text-card-foreground">{m.company}</td>
-                    <td className="px-6 py-3.5 text-card-foreground">{m.primary}</td>
-                    <td className="px-6 py-3.5 text-muted-foreground">{m.cc || "—"}</td>
-                    <td className="px-6 py-3.5 text-muted-foreground">{m.bcc || "—"}</td>
-                    <td className="px-6 py-3.5">
-                      <div className="flex gap-2">
-                        <button onClick={() => openEdit(i)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => handleDelete(i)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+            {isLoading ? (
+              <div className="px-6 py-8 text-center text-muted-foreground">Loading...</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                    <th className="px-6 py-3 font-medium">Company</th>
+                    <th className="px-6 py-3 font-medium">Primary Email</th>
+                    <th className="px-6 py-3 font-medium">CC</th>
+                    <th className="px-6 py-3 font-medium">BCC</th>
+                    <th className="px-6 py-3 font-medium">Actions</th>
                   </tr>
-                ))}
-                {mappings.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
-                      No email mappings configured. Click "Add Mapping" to get started.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {mappings.map((m) => (
+                    <tr key={m.id} className="border-b border-border/50 last:border-0">
+                      <td className="px-6 py-3.5 font-medium text-card-foreground">{m.company}</td>
+                      <td className="px-6 py-3.5 text-card-foreground">{m.primary_email}</td>
+                      <td className="px-6 py-3.5 text-muted-foreground">{m.cc || "—"}</td>
+                      <td className="px-6 py-3.5 text-muted-foreground">{m.bcc || "—"}</td>
+                      <td className="px-6 py-3.5">
+                        <div className="flex gap-2">
+                          <button onClick={() => openEdit(m)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(m)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {mappings.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
+                        No email mappings configured. Click "Add Mapping" to get started.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
@@ -273,9 +275,9 @@ export default function SettingsPage() {
 
         <EmailMappingModal
           open={modalOpen}
-          onClose={() => { setModalOpen(false); setEditingIndex(null); }}
+          onClose={() => { setModalOpen(false); setEditingMapping(null); }}
           onSave={handleSave}
-          initial={editingIndex !== null ? mappings[editingIndex] : undefined}
+          initial={editingMapping ?? undefined}
         />
       </div>
     </DashboardLayout>

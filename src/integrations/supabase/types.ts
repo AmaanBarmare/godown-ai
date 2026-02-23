@@ -14,7 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      email_mappings: {
+        Row: {
+          bcc: string | null
+          cc: string | null
+          company: string
+          created_at: string
+          id: string
+          primary_email: string
+          updated_at: string
+        }
+        Insert: {
+          bcc?: string | null
+          cc?: string | null
+          company: string
+          created_at?: string
+          id?: string
+          primary_email: string
+          updated_at?: string
+        }
+        Update: {
+          bcc?: string | null
+          cc?: string | null
+          company?: string
+          created_at?: string
+          id?: string
+          primary_email?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          amount: string
+          bcc: string | null
+          cc: string | null
+          company: string
+          created_at: string
+          file_name: string
+          id: string
+          invoice_date: string
+          recipient_email: string
+          status: string
+        }
+        Insert: {
+          amount: string
+          bcc?: string | null
+          cc?: string | null
+          company: string
+          created_at?: string
+          file_name: string
+          id?: string
+          invoice_date: string
+          recipient_email: string
+          status?: string
+        }
+        Update: {
+          amount?: string
+          bcc?: string | null
+          cc?: string | null
+          company?: string
+          created_at?: string
+          file_name?: string
+          id?: string
+          invoice_date?: string
+          recipient_email?: string
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
