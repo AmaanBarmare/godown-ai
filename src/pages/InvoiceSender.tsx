@@ -1,49 +1,108 @@
 import { useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Upload, FileText, Sparkles, CheckCircle, Send, X } from "lucide-react";
+import { Upload, FileText, Sparkles, CheckCircle, Send, X, AlertCircle } from "lucide-react";
+import { useAddInvoice } from "@/hooks/use-invoices";
+import { useToast } from "@/hooks/use-toast";
 
-type UploadState = "idle" | "uploading" | "preview" | "sending" | "success";
+type UploadState = "idle" | "uploading" | "preview" | "sending" | "success" | "error";
+
+interface ParsedInvoice {
+  company: string;
+  amount: string;
+  date: string;
+  file_name: string;
+  file_path: string;
+  matched_mapping: {
+    email: string;
+    cc: string;
+    bcc: string;
+    company: string;
+  } | null;
+}
 
 const InvoiceSender = () => {
   const [state, setState] = useState<UploadState>("idle");
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [parsed, setParsed] = useState<ParsedInvoice | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const addInvoice = useAddInvoice();
+  const { toast } = useToast();
 
-  const mockInvoice = {
-    company: "Apex Logistics",
-    amount: "$4,200.00",
-    date: "Feb 19, 2026",
-    email: "billing@apexlogistics.com",
+  const processFile = async (file: File) => {
+    setFileName(file.name);
+    setState("uploading");
+    setErrorMsg("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-invoice`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to parse invoice");
+      }
+
+      const data: ParsedInvoice = await response.json();
+      setParsed(data);
+      setState("preview");
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Unknown error");
+      setState("error");
+    }
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
     const file = e.dataTransfer.files[0];
-    if (file) {
-      setFileName(file.name);
-      setState("uploading");
-      setTimeout(() => setState("preview"), 1500);
-    }
+    if (file) processFile(file);
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
-      setState("uploading");
-      setTimeout(() => setState("preview"), 1500);
-    }
+    if (file) processFile(file);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
+    if (!parsed || !parsed.matched_mapping) return;
     setState("sending");
-    setTimeout(() => setState("success"), 2000);
+
+    try {
+      await addInvoice.mutateAsync({
+        company: parsed.matched_mapping.company,
+        amount: parsed.amount,
+        invoice_date: parsed.date,
+        recipient_email: parsed.matched_mapping.email,
+        cc: parsed.matched_mapping.cc || "",
+        bcc: parsed.matched_mapping.bcc || "",
+        file_name: parsed.file_name,
+        status: "Sent",
+      });
+      setState("success");
+      toast({ title: "Invoice sent!", description: `Sent to ${parsed.matched_mapping.email}` });
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to save invoice");
+      setState("error");
+    }
   };
 
   const handleReset = () => {
     setState("idle");
     setFileName("");
+    setParsed(null);
+    setErrorMsg("");
   };
 
   return (
@@ -57,7 +116,6 @@ const InvoiceSender = () => {
         <div className="max-w-2xl mx-auto">
           {state === "idle" && (
             <div className="space-y-6">
-              {/* Big CTA */}
               <label className="block">
                 <div
                   onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
@@ -87,7 +145,6 @@ const InvoiceSender = () => {
                 </div>
               </label>
 
-              {/* How it works */}
               <div className="bg-card rounded-xl p-6 card-shadow border border-border">
                 <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" /> How AI Invoice Sending Works
@@ -119,7 +176,20 @@ const InvoiceSender = () => {
             </div>
           )}
 
-          {state === "preview" && (
+          {state === "error" && (
+            <div className="bg-card rounded-xl p-10 card-shadow border border-border text-center">
+              <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-destructive" />
+              </div>
+              <h3 className="text-lg font-bold text-card-foreground mb-1">Processing Failed</h3>
+              <p className="text-sm text-muted-foreground mb-6">{errorMsg}</p>
+              <button onClick={handleReset} className="px-6 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity">
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {state === "preview" && parsed && (
             <div className="space-y-4">
               <div className="bg-card rounded-xl p-6 card-shadow border border-border">
                 <div className="flex items-center justify-between mb-4">
@@ -132,14 +202,17 @@ const InvoiceSender = () => {
                 </div>
                 <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border">
                   <FileText className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm text-card-foreground">{fileName}</span>
+                  <span className="text-sm text-card-foreground">{parsed.file_name}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   {[
-                    { label: "Company", value: mockInvoice.company },
-                    { label: "Amount", value: mockInvoice.amount },
-                    { label: "Date", value: mockInvoice.date },
-                    { label: "Recipient", value: mockInvoice.email },
+                    { label: "Company (detected)", value: parsed.company },
+                    { label: "Amount", value: parsed.amount },
+                    { label: "Date", value: parsed.date },
+                    {
+                      label: "Recipient",
+                      value: parsed.matched_mapping?.email ?? "No match found",
+                    },
                   ].map((f) => (
                     <div key={f.label} className="p-3 rounded-lg bg-muted/50">
                       <p className="text-xs text-muted-foreground">{f.label}</p>
@@ -147,10 +220,28 @@ const InvoiceSender = () => {
                     </div>
                   ))}
                 </div>
+
+                {!parsed.matched_mapping && (
+                  <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/20">
+                    <p className="text-sm text-warning font-medium">
+                      ⚠ No email mapping found for "{parsed.company}". Add one in Email Settings first.
+                    </p>
+                  </div>
+                )}
+
+                {parsed.matched_mapping && parsed.matched_mapping.company !== parsed.company && (
+                  <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-xs text-muted-foreground">
+                      Matched to: <span className="font-medium text-card-foreground">{parsed.matched_mapping.company}</span>
+                    </p>
+                  </div>
+                )}
               </div>
+
               <button
                 onClick={handleSend}
-                className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                disabled={!parsed.matched_mapping}
+                className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="w-4 h-4" /> Send Invoice
               </button>
@@ -161,20 +252,22 @@ const InvoiceSender = () => {
             <div className="bg-card rounded-xl p-12 card-shadow border border-border text-center">
               <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto mb-4" />
               <p className="text-base font-semibold text-card-foreground">Sending Invoice...</p>
-              <p className="text-sm text-muted-foreground mt-1">Delivering to {mockInvoice.email}</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Delivering to {parsed?.matched_mapping?.email}
+              </p>
             </div>
           )}
 
-          {state === "success" && (
+          {state === "success" && parsed && (
             <div className="bg-card rounded-xl p-10 card-shadow border border-border text-center">
               <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-success" />
               </div>
               <h3 className="text-lg font-bold text-card-foreground mb-1">Invoice Sent Successfully!</h3>
               <div className="text-sm text-muted-foreground space-y-1 mb-6">
-                <p>Sent to: <span className="text-card-foreground font-medium">{mockInvoice.email}</span></p>
-                <p>Amount: <span className="text-card-foreground font-medium">{mockInvoice.amount}</span></p>
-                <p>Timestamp: <span className="text-card-foreground font-medium">Feb 19, 2026 at 10:42 AM</span></p>
+                <p>Sent to: <span className="text-card-foreground font-medium">{parsed.matched_mapping?.email}</span></p>
+                <p>Amount: <span className="text-card-foreground font-medium">{parsed.amount}</span></p>
+                <p>Company: <span className="text-card-foreground font-medium">{parsed.matched_mapping?.company}</span></p>
               </div>
               <button
                 onClick={handleReset}
