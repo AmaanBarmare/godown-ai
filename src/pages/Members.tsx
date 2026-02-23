@@ -1,130 +1,153 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { X } from "lucide-react";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-const members = [
-  { id: 1, name: "John Carter", revenue: 52400 },
-  { id: 2, name: "Sarah Chen", revenue: 46800 },
-  { id: 3, name: "Mike Ross", revenue: 41200 },
-  { id: 4, name: "Emily Watson", revenue: 32100 },
-  { id: 5, name: "David Kim", revenue: 18500 },
-];
-
-const memberDetails: Record<number, { companies: Array<{ name: string; rent: number }> }> = {
-  1: {
-    companies: [
-      { name: "Apex Logistics", rent: 18500 },
-      { name: "CargoHub Inc.", rent: 15200 },
-      { name: "FrostCold Logistics", rent: 10200 },
-      { name: "Delta Freight", rent: 8500 },
-    ],
-  },
-  2: {
-    companies: [
-      { name: "BlueLine Storage", rent: 22000 },
-      { name: "EastPort Shipping", rent: 14800 },
-      { name: "HarborPoint Storage", rent: 10000 },
-    ],
-  },
-  3: {
-    companies: [
-      { name: "GlobalWare Solutions", rent: 22000 },
-      { name: "Apex Logistics", rent: 19200 },
-    ],
-  },
-  4: {
-    companies: [
-      { name: "CargoHub Inc.", rent: 18100 },
-      { name: "Delta Freight", rent: 14000 },
-    ],
-  },
-  5: {
-    companies: [
-      { name: "FrostCold Logistics", rent: 10000 },
-      { name: "EastPort Shipping", rent: 8500 },
-    ],
-  },
-};
+interface Member {
+  id: number;
+  name: string;
+}
 
 export default function Members() {
-  const [selectedMember, setSelectedMember] = useState<number | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const [nameError, setNameError] = useState("");
+  const { toast } = useToast();
 
-  const detail = selectedMember ? memberDetails[selectedMember] : null;
-  const member = members.find((m) => m.id === selectedMember);
+  const openAdd = () => {
+    setEditingMember(null);
+    setNameInput("");
+    setNameError("");
+    setModalOpen(true);
+  };
+
+  const openEdit = (m: Member) => {
+    setEditingMember(m);
+    setNameInput(m.name);
+    setNameError("");
+    setModalOpen(true);
+  };
+
+  const handleSave = () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setNameError("Name is required");
+      return;
+    }
+    if (editingMember) {
+      setMembers((prev) => prev.map((m) => (m.id === editingMember.id ? { ...m, name: trimmed } : m)));
+      toast({ title: "Member updated", description: `${trimmed} has been updated.` });
+    } else {
+      setMembers((prev) => [...prev, { id: Date.now(), name: trimmed }]);
+      toast({ title: "Member added", description: `${trimmed} has been added.` });
+    }
+    setModalOpen(false);
+  };
+
+  const handleDelete = (m: Member) => {
+    setMembers((prev) => prev.filter((x) => x.id !== m.id));
+    toast({ title: "Member removed", description: `${m.name} has been removed.` });
+  };
 
   return (
     <DashboardLayout>
       <div className="animate-fade-in">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-foreground">Members</h1>
-          <p className="text-sm text-muted-foreground mt-1">Track revenue attribution by team member</p>
+          <p className="text-sm text-muted-foreground mt-1">Manage your team members</p>
         </div>
 
-        <div className="flex gap-6">
-          {/* Table */}
-          <div className={`${selectedMember ? "flex-1" : "w-full"} transition-all`}>
-            <div className="bg-card rounded-xl card-shadow border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
-                    <th className="px-6 py-3.5 font-medium">Member</th>
-                    <th className="px-6 py-3.5 font-medium">Total Revenue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => (
-                    <tr
-                      key={m.id}
-                      onClick={() => setSelectedMember(m.id)}
-                      className={`border-b border-border/50 last:border-0 cursor-pointer transition-colors ${
-                        selectedMember === m.id ? "bg-primary/5" : "hover:bg-muted/30"
-                      }`}
-                    >
-                      <td className="px-6 py-4 font-medium text-card-foreground flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
-                          {m.name.split(" ").map((n) => n[0]).join("")}
-                        </div>
-                        {m.name}
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-card-foreground">${m.revenue.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <div className="bg-card rounded-xl card-shadow border border-border overflow-hidden">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-card-foreground">Team Members</h3>
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Member
+            </button>
           </div>
-
-          {/* Slide panel */}
-          {selectedMember && detail && (
-            <div className="w-[400px] bg-card rounded-xl card-shadow border border-border p-6 animate-slide-in-right">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-base font-bold text-card-foreground">{member?.name}</h3>
-                <button onClick={() => setSelectedMember(null)} className="text-muted-foreground hover:text-foreground">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-4 rounded-lg bg-primary/5 mb-6">
-                <p className="text-xs text-muted-foreground">Total Revenue</p>
-                <p className="text-2xl font-bold text-card-foreground">${member?.revenue.toLocaleString()}</p>
-              </div>
-
-              {/* Company-wise rent breakdown */}
-              <div>
-                <h4 className="text-sm font-semibold text-card-foreground mb-3">Company-wise Rent</h4>
-                <div className="space-y-2">
-                  {detail.companies.map((c) => (
-                    <div key={c.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 text-sm">
-                      <span className="font-medium text-card-foreground">{c.name}</span>
-                      <span className="font-semibold text-card-foreground">${c.rent.toLocaleString()}</span>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                <th className="px-6 py-3.5 font-medium">Member</th>
+                <th className="px-6 py-3.5 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((m) => (
+                <tr key={m.id} className="border-b border-border/50 last:border-0">
+                  <td className="px-6 py-4 font-medium text-card-foreground flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                      {m.name.split(" ").map((n) => n[0]).join("")}
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+                    {m.name}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2">
+                      <button onClick={() => openEdit(m)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(m)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {members.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="px-6 py-8 text-center text-muted-foreground">
+                    No members yet. Click "Add Member" to get started.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {/* Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setModalOpen(false)} />
+          <div className="relative bg-card rounded-xl card-shadow border border-border w-full max-w-sm mx-4 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-semibold text-card-foreground">
+                {editingMember ? "Edit Member" : "Add Member"}
+              </h3>
+              <button onClick={() => setModalOpen(false)} className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Name <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => { setNameInput(e.target.value); setNameError(""); }}
+                placeholder="Enter member name"
+                className={`w-full px-3 py-2.5 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring ${
+                  nameError ? "border-destructive" : "border-input"
+                }`}
+              />
+              {nameError && <p className="text-xs text-destructive mt-1">{nameError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted">
+                Cancel
+              </button>
+              <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90">
+                {editingMember ? "Save" : "Add"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
