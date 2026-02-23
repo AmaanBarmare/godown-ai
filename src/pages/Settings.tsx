@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Mail, Bot, FileText, Plus, Pencil, Trash2 } from "lucide-react";
+import { Mail, FileText, Plus, Pencil, Trash2 } from "lucide-react";
 
 const emailMappings = [
   { company: "Apex Logistics", primary: "billing@apexlogistics.com", cc: "manager@apexlogistics.com", bcc: "" },
@@ -11,16 +11,14 @@ const emailMappings = [
 ];
 
 export default function SettingsPage() {
-  const [confidenceThreshold, setConfidenceThreshold] = useState(85);
-  const [autoSend, setAutoSend] = useState(true);
-  const [activeTab, setActiveTab] = useState<"email" | "templates" | "ai">("email");
+  const [activeTab, setActiveTab] = useState<"email" | "templates">("email");
 
   return (
     <DashboardLayout>
       <div className="animate-fade-in">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Email & AI Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Configure invoice emailing and AI behavior</p>
+          <h1 className="text-2xl font-bold text-foreground">Email Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">Configure invoice emailing</p>
         </div>
 
         {/* Tabs */}
@@ -28,7 +26,6 @@ export default function SettingsPage() {
           {[
             { key: "email" as const, label: "Email Mapping", icon: Mail },
             { key: "templates" as const, label: "Email Templates", icon: FileText },
-            { key: "ai" as const, label: "AI Settings", icon: Bot },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -112,46 +109,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {activeTab === "ai" && (
-          <div className="space-y-6">
-            <div className="bg-card rounded-xl card-shadow border border-border p-6">
-              <h3 className="text-sm font-semibold text-card-foreground mb-4">AI Confidence Threshold</h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Set the minimum confidence level for AI to auto-send invoices. Below this threshold, invoices are flagged for manual review.
-              </p>
-              <div className="flex items-center gap-4">
-                <input
-                  type="range"
-                  min={50}
-                  max={100}
-                  value={confidenceThreshold}
-                  onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
-                  className="flex-1 accent-primary"
-                />
-                <span className="text-lg font-bold text-primary w-14 text-right">{confidenceThreshold}%</span>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                <span>More manual reviews</span>
-                <span>More auto-sends</span>
-              </div>
-            </div>
-
-            <div className="bg-card rounded-xl card-shadow border border-border p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-card-foreground">Auto-Send on High Confidence</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Automatically send invoices when AI confidence exceeds threshold</p>
-                </div>
-                <button
-                  onClick={() => setAutoSend(!autoSend)}
-                  className={`w-11 h-6 rounded-full transition-colors relative ${autoSend ? "bg-success" : "bg-muted"}`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-card absolute top-0.5 transition-transform ${autoSend ? "translate-x-[22px]" : "translate-x-0.5"}`} />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </DashboardLayout>
   );
