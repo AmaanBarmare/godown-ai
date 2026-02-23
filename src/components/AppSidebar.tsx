@@ -18,7 +18,7 @@ const navItems = [
   { title: "Invoice Sender", path: "/invoice-sender", icon: Send },
   { title: "Invoice History", path: "/invoice-history", icon: FileText },
   { title: "Members", path: "/members", icon: Users },
-  { title: "Email & AI Settings", path: "/settings", icon: Settings },
+  { title: "Email Settings", path: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
