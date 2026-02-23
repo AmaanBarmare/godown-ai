@@ -3,7 +3,7 @@ import {
   DollarSign,
   Building2,
   Send,
-  AlertTriangle,
+  
   TrendingUp,
   ArrowUpRight,
 } from "lucide-react";
@@ -23,7 +23,6 @@ const kpis = [
   { label: "Total Revenue", value: "$124,500", change: "+12.5%", icon: DollarSign, positive: true },
   { label: "Total Companies", value: "38", change: "+3", icon: Building2, positive: true },
   { label: "Invoices Sent", value: "156", change: "+24", icon: Send, positive: true },
-  { label: "Pending / Overdue", value: "7", change: "3 overdue", icon: AlertTriangle, positive: false },
 ];
 
 const revenueData = [
@@ -52,11 +51,6 @@ const recentInvoices = [
   { id: "INV-2024-152", company: "EastPort Shipping", amount: "$3,400", date: "Feb 14, 2026", status: "Overdue" },
 ];
 
-const alerts = [
-  { text: "Rent increment for Apex Logistics due in 15 days", type: "warning" },
-  { text: "Invoice overdue: CargoHub Inc. — INV-2024-148", type: "error" },
-  { text: "3 invoices pending review", type: "info" },
-];
 
 const statusColors: Record<string, string> = {
   Sent: "bg-success/10 text-success",
@@ -74,7 +68,7 @@ const Index = () => {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           {kpis.map((kpi) => (
             <div key={kpi.label} className="bg-card rounded-xl p-5 card-shadow border border-border">
               <div className="flex items-center justify-between mb-3">
@@ -139,59 +133,36 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Invoices */}
-          <div className="lg:col-span-2 bg-card rounded-xl p-6 card-shadow border border-border">
-            <h2 className="text-base font-semibold text-card-foreground mb-4">Recent Invoices</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b border-border">
-                    <th className="pb-3 font-medium">Invoice</th>
-                    <th className="pb-3 font-medium">Company</th>
-                    <th className="pb-3 font-medium">Amount</th>
-                    <th className="pb-3 font-medium">Date</th>
-                    <th className="pb-3 font-medium">Status</th>
+        {/* Recent Invoices */}
+        <div className="bg-card rounded-xl p-6 card-shadow border border-border">
+          <h2 className="text-base font-semibold text-card-foreground mb-4">Recent Invoices</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="pb-3 font-medium">Invoice</th>
+                  <th className="pb-3 font-medium">Company</th>
+                  <th className="pb-3 font-medium">Amount</th>
+                  <th className="pb-3 font-medium">Date</th>
+                  <th className="pb-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentInvoices.map((inv) => (
+                  <tr key={inv.id} className="border-b border-border/50 last:border-0">
+                    <td className="py-3 font-medium text-card-foreground">{inv.id}</td>
+                    <td className="py-3 text-card-foreground">{inv.company}</td>
+                    <td className="py-3 font-semibold text-card-foreground">{inv.amount}</td>
+                    <td className="py-3 text-muted-foreground">{inv.date}</td>
+                    <td className="py-3">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[inv.status]}`}>
+                        {inv.status}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {recentInvoices.map((inv) => (
-                    <tr key={inv.id} className="border-b border-border/50 last:border-0">
-                      <td className="py-3 font-medium text-card-foreground">{inv.id}</td>
-                      <td className="py-3 text-card-foreground">{inv.company}</td>
-                      <td className="py-3 font-semibold text-card-foreground">{inv.amount}</td>
-                      <td className="py-3 text-muted-foreground">{inv.date}</td>
-                      <td className="py-3">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[inv.status]}`}>
-                          {inv.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Alerts */}
-          <div className="bg-card rounded-xl p-6 card-shadow border border-border">
-            <h2 className="text-base font-semibold text-card-foreground mb-4">Alerts</h2>
-            <div className="space-y-3">
-              {alerts.map((alert, i) => (
-                <div
-                  key={i}
-                  className={`p-3 rounded-lg text-sm ${
-                    alert.type === "error"
-                      ? "bg-destructive/10 text-destructive"
-                      : alert.type === "warning"
-                      ? "bg-warning/10 text-warning"
-                      : "bg-info/10 text-info"
-                  }`}
-                >
-                  {alert.text}
-                </div>
-              ))}
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
