@@ -5,6 +5,9 @@ node_modules
 dist
 dist-ssr
 
+# Package manager lockfiles (only commit the one you use)
+bun.lock
+
 # Environment variables
 .env
 .env.*
@@ -18,6 +21,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Test coverage / reports
+coverage
 
 # Local config
 *.local

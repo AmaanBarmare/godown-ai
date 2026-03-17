@@ -1,13 +1,14 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
+import OpenAI from "openai";
 
 admin.initializeApp();
 
-const AI_GATEWAY_KEY = defineSecret("AI_GATEWAY_KEY");
+const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 
 export const parseInvoice = onCall(
-  { secrets: [AI_GATEWAY_KEY] },
+  { secrets: [OPENAI_API_KEY] },
   async (request) => {
     const { filePath, fileName, mimeType } = request.data as {
       filePath: string;
@@ -26,102 +27,81 @@ export const parseInvoice = onCall(
       const [buffer] = await file.download();
       const base64 = buffer.toString("base64");
 
-      const apiKey = AI_GATEWAY_KEY.value();
+      const apiKey = OPENAI_API_KEY.value();
       if (!apiKey) {
-        throw new HttpsError("failed-precondition", "AI_GATEWAY_KEY not configured");
+        throw new HttpsError("failed-precondition", "OPENAI_API_KEY not configured");
       }
 
-      // Call AI to extract invoice data
-      const aiResponse = await fetch(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You are an invoice data extractor. Extract the company name and invoice amount from the provided invoice document. The currency is INR (₹). You MUST call the extract_invoice_data function with the results.",
+      const openai = new OpenAI({ apiKey });
+
+      // Build content: PDFs use "file" type, images use "image_url"
+      const fileContent: OpenAI.Chat.ChatCompletionContentPart =
+        mimeType === "application/pdf"
+          ? {
+              type: "file" as unknown as "image_url", // openai SDK types catch up later
+              // @ts-expect-error — openai SDK typedefs lag behind API support
+              file: {
+                filename: fileName,
+                file_data: `data:application/pdf;base64,${base64}`,
               },
+            }
+          : {
+              type: "image_url",
+              image_url: { url: `data:${mimeType};base64,${base64}` },
+            };
+
+      const aiResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an invoice data extractor. Extract the company name and invoice amount from the provided invoice. The currency is INR (₹). You MUST call the extract_invoice_data function with the results.",
+          },
+          {
+            role: "user",
+            content: [
+              fileContent,
               {
-                role: "user",
-                content: [
-                  {
-                    type: "image_url",
-                    image_url: {
-                      url: `data:${mimeType};base64,${base64}`,
-                    },
-                  },
-                  {
-                    type: "text",
-                    text: "Extract the company name (the company being billed / recipient) and the total amount from this invoice.",
-                  },
-                ],
+                type: "text",
+                text: "Extract the company name (the company being billed / recipient) and the total amount from this invoice.",
               },
             ],
-            tools: [
-              {
-                type: "function",
-                function: {
-                  name: "extract_invoice_data",
-                  description: "Extract structured invoice data",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      company: {
-                        type: "string",
-                        description: "The company name being billed",
-                      },
-                      amount: {
-                        type: "string",
-                        description:
-                          "The total invoice amount including currency symbol, e.g. ₹4,200.00",
-                      },
-                      date: {
-                        type: "string",
-                        description: "The invoice date, e.g. Feb 19, 2026",
-                      },
-                    },
-                    required: ["company", "amount"],
-                    additionalProperties: false,
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "extract_invoice_data",
+              description: "Extract structured invoice data",
+              parameters: {
+                type: "object",
+                properties: {
+                  company: {
+                    type: "string",
+                    description: "The company name being billed",
+                  },
+                  amount: {
+                    type: "string",
+                    description:
+                      "The total invoice amount including currency symbol, e.g. ₹4,200.00",
+                  },
+                  date: {
+                    type: "string",
+                    description: "The invoice date, e.g. Feb 19, 2026",
                   },
                 },
+                required: ["company", "amount"],
+                additionalProperties: false,
               },
-            ],
-            tool_choice: {
-              type: "function",
-              function: { name: "extract_invoice_data" },
             },
-          }),
-        }
-      );
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "extract_invoice_data" } },
+      });
 
-      if (!aiResponse.ok) {
-        const status = aiResponse.status;
-        if (status === 429) {
-          throw new HttpsError(
-            "resource-exhausted",
-            "Rate limit exceeded. Please try again later."
-          );
-        }
-        if (status === 402) {
-          throw new HttpsError(
-            "resource-exhausted",
-            "AI credits exhausted. Please add funds."
-          );
-        }
-        const errText = await aiResponse.text();
-        console.error("AI error:", status, errText);
-        throw new HttpsError("internal", "AI extraction failed");
-      }
-
-      const aiData = await aiResponse.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
       if (!toolCall) {
         throw new HttpsError("internal", "AI did not return structured data");
       }
