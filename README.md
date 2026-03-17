@@ -1,73 +1,96 @@
-# Welcome to your Lovable project
+# Invoice Genius
 
-## Project info
+AI-powered invoice management application for warehouse rental invoicing. Upload PDF invoices, automatically extract company and amount data using AI, match against configured email recipients, and track invoice history.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Tech Stack
 
-## How can I edit this code?
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
+- **Backend:** Firebase (Firestore, Cloud Functions, Storage)
+- **Data Fetching:** TanStack React Query
+- **AI:** Google Gemini (via API gateway) for PDF invoice parsing
 
-There are several ways of editing your application.
+## Getting Started
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Node.js (v18+)
+- npm
+- Firebase CLI (`npm install -g firebase-tools`)
+- A Firebase project (Blaze plan for Cloud Functions)
 
-Changes made via Lovable will be committed automatically to this repo.
+### Firebase Setup
 
-**Use your preferred IDE**
+1. Go to [Firebase Console](https://console.firebase.google.com) and create a new project
+2. **Firestore:** Build → Firestore Database → Create database → Start in test mode
+3. **Storage:** Build → Storage → Get started → Start in test mode
+4. **Web App:** Project Settings → General → Add app (Web) → Copy the config values
+5. Update `.firebaserc` with your project ID
+6. Set the AI gateway secret:
+   ```sh
+   firebase functions:secrets:set AI_GATEWAY_KEY
+   ```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Local Setup
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Install dependencies
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Copy environment variables and fill in your Firebase config
+cp .env.example .env
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install Cloud Functions dependencies
+cd functions && npm install && cd ..
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server (runs on http://localhost:8080)
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Seed Data
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+To populate initial email mappings:
 
-**Use GitHub Codespaces**
+1. Download your Firebase service account key from:
+   Firebase Console → Project Settings → Service Accounts → Generate New Private Key
+2. Save it as `service-account.json` in the project root
+3. Run: `npx tsx scripts/seed-firestore.ts`
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Deploy Cloud Functions
 
-## What technologies are used for this project?
+```sh
+firebase deploy --only functions
+```
 
-This project is built with:
+### Environment Variables
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+| Variable | Description |
+|---|---|
+| `VITE_FIREBASE_API_KEY` | Firebase API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
+| `VITE_FIREBASE_APP_ID` | Firebase app ID |
 
-## How can I deploy this project?
+The Cloud Function also requires `AI_GATEWAY_KEY` set via `firebase functions:secrets:set`.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Scripts
 
-## Can I connect a custom domain to my Lovable project?
+| Command | Description |
+|---|---|
+| `npm run dev` | Start dev server on port 8080 |
+| `npm run build` | Production build |
+| `npm run build:dev` | Dev build with sourcemaps |
+| `npm run preview` | Preview production build |
+| `npm run test` | Run tests |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run lint` | Lint with ESLint |
 
-Yes, you can!
+## Features
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- **Dashboard** — KPIs and charts for invoice overview
+- **Invoice Sender** — Upload PDF, AI extracts company/amount/date, matches email recipients
+- **Invoice History** — Search and filter sent invoices
+- **Companies** — Manage company records
+- **Members** — Manage team members
+- **Settings** — Configure email mappings (company to recipient email, CC, BCC)

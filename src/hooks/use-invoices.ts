@@ -1,5 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/config";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
 
 export interface Invoice {
   id: string;
@@ -18,12 +25,12 @@ export function useInvoices() {
   return useQuery({
     queryKey: ["invoices"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as Invoice[];
+      const q = query(collection(db, "invoices"), orderBy("created_at", "desc"));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Invoice[];
     },
   });
 }
@@ -32,9 +39,11 @@ export function useAddInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (invoice: Omit<Invoice, "id" | "created_at">) => {
-      const { data, error } = await supabase.from("invoices").insert(invoice).select().single();
-      if (error) throw error;
-      return data;
+      const docRef = await addDoc(collection(db, "invoices"), {
+        ...invoice,
+        created_at: new Date().toISOString(),
+      });
+      return { id: docRef.id, ...invoice, created_at: new Date().toISOString() };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
   });

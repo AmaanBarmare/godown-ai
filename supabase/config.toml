@@ -1,4 +1,0 @@
-project_id = "rjlvblgicjhbenicmvhv"
-
-[functions.parse-invoice]
-verify_jwt = false

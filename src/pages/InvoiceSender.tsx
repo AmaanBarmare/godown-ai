@@ -3,6 +3,9 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Upload, FileText, Sparkles, CheckCircle, Send, X, AlertCircle } from "lucide-react";
 import { useAddInvoice } from "@/hooks/use-invoices";
 import { useToast } from "@/hooks/use-toast";
+import { storage, functions } from "@/integrations/firebase/config";
+import { ref, uploadBytes } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 
 type UploadState = "idle" | "uploading" | "preview" | "sending" | "success" | "error";
 
@@ -20,6 +23,11 @@ interface ParsedInvoice {
   } | null;
 }
 
+const parseInvoiceFn = httpsCallable<
+  { filePath: string; fileName: string; mimeType: string },
+  ParsedInvoice
+>(functions, "parseInvoice");
+
 const InvoiceSender = () => {
   const [state, setState] = useState<UploadState>("idle");
   const [dragActive, setDragActive] = useState(false);
@@ -35,27 +43,20 @@ const InvoiceSender = () => {
     setErrorMsg("");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      // Upload file to Firebase Storage
+      const filePath = `invoices/${crypto.randomUUID()}-${file.name}`;
+      await uploadBytes(ref(storage, filePath), file, {
+        contentType: file.type,
+      });
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-invoice`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: formData,
-        }
-      );
+      // Call Cloud Function to parse the invoice
+      const result = await parseInvoiceFn({
+        filePath,
+        fileName: file.name,
+        mimeType: file.type || "application/pdf",
+      });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to parse invoice");
-      }
-
-      const data: ParsedInvoice = await response.json();
-      setParsed(data);
+      setParsed(result.data);
       setState("preview");
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Unknown error");
