@@ -10,14 +10,9 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
+import type { EmailMapping } from "@/integrations/firebase/types";
 
-export interface EmailMapping {
-  id: string;
-  company: string;
-  primary_email: string;
-  cc: string;
-  bcc: string;
-}
+export type { EmailMapping };
 
 export function useEmailMappings() {
   return useQuery({
@@ -36,7 +31,7 @@ export function useEmailMappings() {
 export function useAddEmailMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (mapping: Omit<EmailMapping, "id">) => {
+    mutationFn: async (mapping: Omit<EmailMapping, "id" | "created_at" | "updated_at">) => {
       const now = new Date().toISOString();
       await addDoc(collection(db, "email_mappings"), {
         ...mapping,

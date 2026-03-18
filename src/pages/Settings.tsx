@@ -14,6 +14,7 @@ import {
 const emailSchema = z.string().email("Invalid email address").max(255).or(z.literal(""));
 const mappingSchema = z.object({
   company: z.string().trim().min(1, "Company name is required").max(100),
+  sender_email: z.string().trim().min(1, "Sender email is required").email("Invalid email address").max(255),
   primary_email: z.string().trim().min(1, "Primary email is required").email("Invalid email address").max(255),
   cc: emailSchema.default(""),
   bcc: emailSchema.default(""),
@@ -34,8 +35,8 @@ function EmailMappingModal({
 }) {
   const [form, setForm] = useState<MappingFormData>(
     initial
-      ? { company: initial.company, primary_email: initial.primary_email, cc: initial.cc, bcc: initial.bcc }
-      : { company: "", primary_email: "", cc: "", bcc: "" }
+      ? { company: initial.company, sender_email: initial.sender_email || "", primary_email: initial.primary_email, cc: initial.cc, bcc: initial.bcc }
+      : { company: "", sender_email: "", primary_email: "", cc: "", bcc: "" }
   );
   const [errors, setErrors] = useState<Partial<Record<keyof MappingFormData, string>>>({});
 
@@ -63,6 +64,7 @@ function EmailMappingModal({
 
   const fields: { key: keyof MappingFormData; label: string; required?: boolean }[] = [
     { key: "company", label: "Company Name", required: true },
+    { key: "sender_email", label: "Sender Email (Landlord)", required: true },
     { key: "primary_email", label: "Primary Email", required: true },
     { key: "cc", label: "CC Email" },
     { key: "bcc", label: "BCC Email" },
@@ -137,7 +139,7 @@ export default function SettingsPage() {
 
   const handleSave = async (data: MappingFormData) => {
     try {
-      const payload = { company: data.company, primary_email: data.primary_email, cc: data.cc ?? "", bcc: data.bcc ?? "" };
+      const payload = { company: data.company, sender_email: data.sender_email, primary_email: data.primary_email, cc: data.cc ?? "", bcc: data.bcc ?? "" };
       if (editingMapping) {
         await updateMapping.mutateAsync({ id: editingMapping.id, ...payload });
         toast({ title: "Mapping updated", description: `Email mapping for ${payload.company} has been updated.` });
@@ -203,44 +205,48 @@ export default function SettingsPage() {
             {isLoading ? (
               <div className="px-6 py-8 text-center text-muted-foreground">Loading...</div>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
-                    <th className="px-6 py-3 font-medium">Company</th>
-                    <th className="px-6 py-3 font-medium">Primary Email</th>
-                    <th className="px-6 py-3 font-medium">CC</th>
-                    <th className="px-6 py-3 font-medium">BCC</th>
-                    <th className="px-6 py-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappings.map((m) => (
-                    <tr key={m.id} className="border-b border-border/50 last:border-0">
-                      <td className="px-6 py-3.5 font-medium text-card-foreground">{m.company}</td>
-                      <td className="px-6 py-3.5 text-card-foreground">{m.primary_email}</td>
-                      <td className="px-6 py-3.5 text-muted-foreground">{m.cc || "—"}</td>
-                      <td className="px-6 py-3.5 text-muted-foreground">{m.bcc || "—"}</td>
-                      <td className="px-6 py-3.5">
-                        <div className="flex gap-2">
-                          <button onClick={() => openEdit(m)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => handleDelete(m)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-muted-foreground border-b border-border bg-muted/30">
+                      <th className="px-6 py-3 font-medium">Company</th>
+                      <th className="px-6 py-3 font-medium">Sender Email</th>
+                      <th className="px-6 py-3 font-medium">Primary Email</th>
+                      <th className="px-6 py-3 font-medium">CC</th>
+                      <th className="px-6 py-3 font-medium">BCC</th>
+                      <th className="px-6 py-3 font-medium">Actions</th>
                     </tr>
-                  ))}
-                  {mappings.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
-                        No email mappings configured. Click "Add Mapping" to get started.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {mappings.map((m) => (
+                      <tr key={m.id} className="border-b border-border/50 last:border-0">
+                        <td className="px-6 py-3.5 font-medium text-card-foreground">{m.company}</td>
+                        <td className="px-6 py-3.5 text-card-foreground">{m.sender_email || "—"}</td>
+                        <td className="px-6 py-3.5 text-card-foreground">{m.primary_email}</td>
+                        <td className="px-6 py-3.5 text-muted-foreground">{m.cc || "—"}</td>
+                        <td className="px-6 py-3.5 text-muted-foreground">{m.bcc || "—"}</td>
+                        <td className="px-6 py-3.5">
+                          <div className="flex gap-2">
+                            <button onClick={() => openEdit(m)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleDelete(m)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {mappings.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                          No email mappings configured. Click "Add Mapping" to get started.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

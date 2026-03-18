@@ -3,21 +3,26 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Building2,
-  Send,
   FileText,
   Users,
   Settings,
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  FilePlus,
+  Bell,
+  CheckCircle,
+  History,
 } from "lucide-react";
 
 const navItems = [
   { title: "Dashboard", path: "/", icon: LayoutDashboard },
   { title: "Companies", path: "/companies", icon: Building2 },
-  { title: "Invoice Sender", path: "/invoice-sender", icon: Send },
-  { title: "Invoice History", path: "/invoice-history", icon: FileText },
   { title: "Members", path: "/members", icon: Users },
+  { title: "Invoice Generator", path: "/invoice-generator", icon: FilePlus },
+  { title: "Invoice History", path: "/invoice-history", icon: History },
+  { title: "Payment Reminder", path: "/payment-reminder", icon: Bell },
+  { title: "Payment Confirmation", path: "/payment-confirmation", icon: CheckCircle },
   { title: "Email Settings", path: "/settings", icon: Settings },
 ];
 
@@ -39,9 +44,9 @@ export function AppSidebar() {
         {!collapsed && (
           <div className="overflow-hidden">
             <h1 className="text-base font-bold text-sidebar-accent-foreground tracking-tight">
-              Invoice Wizard
+              GodownOS
             </h1>
-            <p className="text-[11px] text-sidebar-foreground/60">AI-powered invoicing</p>
+            <p className="text-[11px] text-sidebar-foreground/60">Warehouse management</p>
           </div>
         )}
       </div>

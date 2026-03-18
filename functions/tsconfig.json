@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
     "noImplicitReturns": true,
     "noUnusedLocals": false,
     "outDir": "lib",
@@ -8,7 +7,9 @@
     "strict": true,
     "target": "es2022",
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "moduleResolution": "node16",
+    "module": "node16"
   },
   "compileOnSave": true,
   "include": ["src"]

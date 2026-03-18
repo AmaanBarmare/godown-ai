@@ -4,22 +4,12 @@ import {
   collection,
   getDocs,
   addDoc,
+  updateDoc,
+  doc,
   query,
   orderBy,
 } from "firebase/firestore";
-
-export interface Invoice {
-  id: string;
-  company: string;
-  amount: string;
-  invoice_date: string;
-  recipient_email: string;
-  cc: string;
-  bcc: string;
-  file_name: string;
-  status: string;
-  created_at: string;
-}
+import type { Invoice } from "@/integrations/firebase/types";
 
 export function useInvoices() {
   return useQuery({
@@ -43,8 +33,39 @@ export function useAddInvoice() {
         ...invoice,
         created_at: new Date().toISOString(),
       });
-      return { id: docRef.id, ...invoice, created_at: new Date().toISOString() };
+      return { id: docRef.id, ...invoice, created_at: new Date().toISOString() } as Invoice;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
   });
+}
+
+export function useUpdateInvoiceStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      status,
+      ...extra
+    }: {
+      id: string;
+      status: Invoice["status"];
+      reminder_sent_at?: string;
+      payment_received?: number;
+      tds_amount?: number;
+      receipt_date?: string;
+      bank_received_into?: string;
+      confirmed_at?: string;
+    }) => {
+      await updateDoc(doc(db, "invoices", id), { status, ...extra });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
+export function useInvoicesByStatus(statuses: Invoice["status"][]) {
+  const { data: invoices = [], ...rest } = useInvoices();
+  return {
+    ...rest,
+    data: invoices.filter((inv) => statuses.includes(inv.status)),
+  };
 }

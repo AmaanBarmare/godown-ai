@@ -1,155 +1,138 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
-import OpenAI from "openai";
+import { Resend } from "resend";
 
 admin.initializeApp();
 
-const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
-export const parseInvoice = onCall(
-  { secrets: [OPENAI_API_KEY] },
+export const sendInvoice = onCall(
+  { secrets: [RESEND_API_KEY] },
   async (request) => {
-    const { filePath, fileName, mimeType } = request.data as {
+    const { invoiceData, filePath, recipientEmail, senderEmail, cc, bcc } = request.data as {
+      invoiceData: {
+        invoice_number: string;
+        invoice_period: string;
+        company: string;
+        total_amount: number;
+        due_date: string;
+      };
       filePath: string;
-      fileName: string;
-      mimeType: string;
+      recipientEmail: string;
+      senderEmail: string;
+      cc?: string;
+      bcc?: string;
     };
 
-    if (!filePath || !fileName) {
-      throw new HttpsError("invalid-argument", "filePath and fileName are required");
+    if (!filePath || !recipientEmail) {
+      throw new HttpsError("invalid-argument", "filePath and recipientEmail are required");
     }
 
     try {
-      // Download file from Firebase Storage
+      // Download PDF from Firebase Storage
       const bucket = admin.storage().bucket();
       const file = bucket.file(filePath);
       const [buffer] = await file.download();
-      const base64 = buffer.toString("base64");
 
-      const apiKey = OPENAI_API_KEY.value();
+      const apiKey = RESEND_API_KEY.value();
       if (!apiKey) {
-        throw new HttpsError("failed-precondition", "OPENAI_API_KEY not configured");
+        throw new HttpsError("failed-precondition", "RESEND_API_KEY not configured");
       }
 
-      const openai = new OpenAI({ apiKey });
+      const resend = new Resend(apiKey);
 
-      // Build content: PDFs use "file" type, images use "image_url"
-      const fileContent: OpenAI.Chat.ChatCompletionContentPart =
-        mimeType === "application/pdf"
-          ? {
-              type: "file" as unknown as "image_url", // openai SDK types catch up later
-              // @ts-expect-error — openai SDK typedefs lag behind API support
-              file: {
-                filename: fileName,
-                file_data: `data:application/pdf;base64,${base64}`,
-              },
-            }
-          : {
-              type: "image_url",
-              image_url: { url: `data:${mimeType};base64,${base64}` },
-            };
-
-      const aiResponse = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
+      await resend.emails.send({
+        from: senderEmail || "invoices@example.com",
+        to: [recipientEmail],
+        cc: cc ? [cc] : undefined,
+        bcc: bcc ? [bcc] : undefined,
+        subject: `Invoice ${invoiceData.invoice_number} - ${invoiceData.invoice_period}`,
+        html: `
+          <p>Dear ${invoiceData.company},</p>
+          <p>Please find attached invoice <strong>${invoiceData.invoice_number}</strong> for the period of <strong>${invoiceData.invoice_period}</strong>.</p>
+          <p>Amount: <strong>₹${invoiceData.total_amount.toLocaleString("en-IN")}</strong></p>
+          <p>Due Date: <strong>${invoiceData.due_date}</strong></p>
+          <p>Please process the payment at your earliest convenience.</p>
+          <p>Best regards,<br/>Warehouse Rentals</p>
+        `,
+        attachments: [
           {
-            role: "system",
-            content:
-              "You are an invoice data extractor. Extract the company name and invoice amount from the provided invoice. The currency is INR (₹). You MUST call the extract_invoice_data function with the results.",
-          },
-          {
-            role: "user",
-            content: [
-              fileContent,
-              {
-                type: "text",
-                text: "Extract the company name (the company being billed / recipient) and the total amount from this invoice.",
-              },
-            ],
+            filename: `${invoiceData.invoice_number}.pdf`,
+            content: buffer.toString("base64"),
           },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "extract_invoice_data",
-              description: "Extract structured invoice data",
-              parameters: {
-                type: "object",
-                properties: {
-                  company: {
-                    type: "string",
-                    description: "The company name being billed",
-                  },
-                  amount: {
-                    type: "string",
-                    description:
-                      "The total invoice amount including currency symbol, e.g. ₹4,200.00",
-                  },
-                  date: {
-                    type: "string",
-                    description: "The invoice date, e.g. Feb 19, 2026",
-                  },
-                },
-                required: ["company", "amount"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "extract_invoice_data" } },
       });
 
-      const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall) {
-        throw new HttpsError("internal", "AI did not return structured data");
-      }
-
-      const extracted = JSON.parse(toolCall.function.arguments);
-
-      // Find matching email mapping (fuzzy match)
-      const mappingsSnapshot = await admin
-        .firestore()
-        .collection("email_mappings")
-        .get();
-
-      let matchedMapping = null;
-      const companyLower = extracted.company.toLowerCase();
-
-      for (const doc of mappingsSnapshot.docs) {
-        const m = doc.data();
-        if (
-          companyLower.includes(m.company.toLowerCase()) ||
-          m.company.toLowerCase().includes(companyLower)
-        ) {
-          matchedMapping = {
-            email: m.primary_email,
-            cc: m.cc,
-            bcc: m.bcc,
-            company: m.company,
-          };
-          break;
-        }
-      }
-
-      return {
-        company: extracted.company,
-        amount: extracted.amount || "N/A",
-        date:
-          extracted.date ||
-          new Date().toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }),
-        file_name: fileName,
-        file_path: filePath,
-        matched_mapping: matchedMapping,
-      };
+      return { success: true };
     } catch (e) {
       if (e instanceof HttpsError) throw e;
-      console.error("parse-invoice error:", e);
+      console.error("sendInvoice error:", e);
+      throw new HttpsError(
+        "internal",
+        e instanceof Error ? e.message : "Unknown error"
+      );
+    }
+  }
+);
+
+export const sendPaymentReminder = onCall(
+  { secrets: [RESEND_API_KEY] },
+  async (request) => {
+    const {
+      invoiceId,
+      recipientEmail,
+      senderEmail,
+      invoiceNumber,
+      amount,
+      dueDate,
+      companyName,
+    } = request.data as {
+      invoiceId: string;
+      recipientEmail: string;
+      senderEmail: string;
+      invoiceNumber: string;
+      amount: number;
+      dueDate: string;
+      companyName: string;
+    };
+
+    if (!invoiceId || !recipientEmail) {
+      throw new HttpsError("invalid-argument", "invoiceId and recipientEmail are required");
+    }
+
+    try {
+      const apiKey = RESEND_API_KEY.value();
+      if (!apiKey) {
+        throw new HttpsError("failed-precondition", "RESEND_API_KEY not configured");
+      }
+
+      const resend = new Resend(apiKey);
+
+      await resend.emails.send({
+        from: senderEmail || "invoices@example.com",
+        to: [recipientEmail],
+        subject: `Payment Reminder: Invoice ${invoiceNumber}`,
+        html: `
+          <p>Dear ${companyName},</p>
+          <p>This is a friendly reminder that payment for invoice <strong>${invoiceNumber}</strong> is overdue.</p>
+          <p>Amount Due: <strong>₹${amount.toLocaleString("en-IN")}</strong></p>
+          <p>Original Due Date: <strong>${dueDate}</strong></p>
+          <p>Please process the payment at your earliest convenience.</p>
+          <p>Best regards,<br/>Warehouse Rentals</p>
+        `,
+      });
+
+      // Update invoice status to Pending
+      await admin.firestore().collection("invoices").doc(invoiceId).update({
+        status: "Pending",
+        reminder_sent_at: new Date().toISOString(),
+      });
+
+      return { success: true };
+    } catch (e) {
+      if (e instanceof HttpsError) throw e;
+      console.error("sendPaymentReminder error:", e);
       throw new HttpsError(
         "internal",
         e instanceof Error ? e.message : "Unknown error"
