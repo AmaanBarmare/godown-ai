@@ -1,6 +1,6 @@
-# GodownOS — Implementation Plan
+# GodownAI — Implementation Plan
 
-**Goal:** Transform the current "Invoice Genius" prototype into the full GodownOS dashboard as
+**Goal:** Transform the current "GodownAI v1" prototype into the full GodownAI dashboard as
 specified in the walkthrough document. This covers 8 modules: Dashboard, Companies,
 Invoice History, Members, Email Settings, Invoice Generator, Payment Reminder, and
 Payment Confirmation.

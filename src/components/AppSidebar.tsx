@@ -44,9 +44,9 @@ export function AppSidebar() {
         {!collapsed && (
           <div className="overflow-hidden">
             <h1 className="text-base font-bold text-sidebar-accent-foreground tracking-tight">
-              GodownOS
+              GodownAI
             </h1>
-            <p className="text-[11px] text-sidebar-foreground/60">Warehouse management</p>
+            <p className="text-[11px] text-sidebar-foreground/60">AI-powered invoicing</p>
           </div>
         )}
       </div>

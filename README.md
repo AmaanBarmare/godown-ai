@@ -1,4 +1,4 @@
-# GodownOS
+# GodownAI
 
 **A full-stack warehouse rental management platform** that handles the entire invoicing lifecycle — from tenant onboarding and automated invoice generation to payment reminders with time-locked sends and TDS-reconciled payment confirmations.
 
@@ -14,7 +14,7 @@ I wanted to build a system that handles the full lifecycle: **configure once, ge
 
 ### The AI Pivot: Why I Removed the AI Upload Feature
 
-The first version (v1, "Invoice Genius") used **OpenAI GPT-4o via Cloud Functions** to parse uploaded PDF invoices — extracting company names, amounts, and dates using vision + tool calling, then fuzzy-matching against configured email mappings.
+The first version (v1, "GodownAI v1") used **OpenAI GPT-4o via Cloud Functions** to parse uploaded PDF invoices — extracting company names, amounts, and dates using vision + tool calling, then fuzzy-matching against configured email mappings.
 
 It worked, but after using it with real invoices I realized the fundamental flaw: **landlords don't receive invoices, they send them**. The AI parser was solving the wrong problem. A warehouse owner doesn't need to extract data from someone else's invoice — they need to *generate* their own invoices from their tenant contracts.
 
@@ -305,7 +305,7 @@ functions/
 
 ## Evolution: v1 → v2
 
-| Aspect | v1 ("Invoice Genius") | v2 ("GodownOS") |
+| Aspect | v1 ("GodownAI v1") | v2 ("GodownAI") |
 |---|---|---|
 | **Core flow** | Upload PDF → AI extracts data → log invoice | Configure contracts → generate invoice → email → track payment |
 | **AI dependency** | OpenAI GPT-4o for every invoice | None — deterministic computation from stored contract data |
