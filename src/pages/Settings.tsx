@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Mail, FileText, Plus, Pencil, Trash2, X } from "lucide-react";
 import { z } from "zod";
@@ -33,12 +33,24 @@ function EmailMappingModal({
   onSave: (data: MappingFormData) => void;
   initial?: EmailMapping;
 }) {
-  const [form, setForm] = useState<MappingFormData>(
-    initial
-      ? { company: initial.company, sender_email: initial.sender_email || "", primary_email: initial.primary_email, cc: initial.cc, bcc: initial.bcc }
-      : { company: "", sender_email: "", primary_email: "", cc: "", bcc: "" }
-  );
+  const [form, setForm] = useState<MappingFormData>({ company: "", sender_email: "", primary_email: "", cc: "", bcc: "" });
   const [errors, setErrors] = useState<Partial<Record<keyof MappingFormData, string>>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    setErrors({});
+    setForm(
+      initial
+        ? {
+            company: initial.company,
+            sender_email: initial.sender_email || "",
+            primary_email: initial.primary_email,
+            cc: initial.cc,
+            bcc: initial.bcc,
+          }
+        : { company: "", sender_email: "", primary_email: "", cc: "", bcc: "" }
+    );
+  }, [open, initial]);
 
   if (!open) return null;
 

@@ -76,7 +76,14 @@ export default function PaymentReminder() {
       toast({ title: "Reminder sent", description: `Payment reminder sent for ${inv.invoice_number}` });
     } catch (e) {
       console.error(e);
-      toast({ title: "Error", description: e instanceof Error ? e.message : "Failed to send reminder", variant: "destructive" });
+      const anyErr = e as any;
+      const code = typeof anyErr?.code === "string" ? anyErr.code : undefined;
+      const message = typeof anyErr?.message === "string" ? anyErr.message : undefined;
+      toast({
+        title: "Error",
+        description: code ? `${code}: ${message ?? "Request failed"}` : (message ?? "Failed to send reminder"),
+        variant: "destructive",
+      });
     } finally {
       setSendingId(null);
     }

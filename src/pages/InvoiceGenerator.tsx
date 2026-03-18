@@ -260,7 +260,14 @@ export default function InvoiceGenerator() {
       navigate("/invoice-history");
     } catch (e) {
       console.error(e);
-      toast({ title: "Error", description: e instanceof Error ? e.message : "Failed to send invoice", variant: "destructive" });
+      const anyErr = e as any;
+      const code = typeof anyErr?.code === "string" ? anyErr.code : undefined;
+      const message = typeof anyErr?.message === "string" ? anyErr.message : undefined;
+      toast({
+        title: "Error",
+        description: code ? `${code}: ${message ?? "Request failed"}` : (message ?? "Failed to send invoice"),
+        variant: "destructive",
+      });
     } finally {
       setSending(false);
     }

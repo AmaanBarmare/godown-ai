@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { X, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -36,6 +36,15 @@ function PaymentModal({
   const [receiptDate, setReceiptDate] = useState<Date>(new Date());
   const [bankReceivedInto, setBankReceivedInto] = useState(defaultBank);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setAmountReceived(0);
+    setTdsAmount(0);
+    setReceiptDate(new Date());
+    setBankReceivedInto(defaultBank);
+    setError("");
+  }, [open, invoice.id, defaultBank]);
 
   if (!open) return null;
 

@@ -123,11 +123,16 @@ export const sendPaymentReminder = onCall(
         `,
       });
 
-      // Update invoice status to Pending
-      await admin.firestore().collection("invoices").doc(invoiceId).update({
-        status: "Pending",
-        reminder_sent_at: new Date().toISOString(),
-      });
+      // Best-effort: status update is also done client-side.
+      // If Firestore IAM is restricted for this runtime SA, don't block reminder sending.
+      try {
+        await admin.firestore().collection("invoices").doc(invoiceId).update({
+          status: "Pending",
+          reminder_sent_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error("sendPaymentReminder: failed to update invoice status:", err);
+      }
 
       return { success: true };
     } catch (e) {

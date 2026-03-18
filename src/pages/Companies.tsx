@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Building2, Search, Plus, Pencil, Trash2, X, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -63,26 +63,32 @@ function CompanyModal({
   initial?: Company;
   saving: boolean;
 }) {
-  const [form, setForm] = useState<CompanyFormData>(
-    initial
-      ? {
-          company_name: initial.company_name,
-          signing_authority: initial.signing_authority,
-          gst_number: initial.gst_number,
-          registered_address: initial.registered_address,
-          warehouse_location: initial.warehouse_location,
-          area_sqft: initial.area_sqft,
-          rate_per_sqft: initial.rate_per_sqft,
-          possession_date: initial.possession_date,
-          annual_increment: initial.annual_increment,
-          next_increment_date: initial.next_increment_date,
-          invoice_send_day: initial.invoice_send_day,
-          rent_due_day: initial.rent_due_day,
-          reminder_buffer_days: initial.reminder_buffer_days,
-        }
-      : { ...emptyForm }
-  );
+  const [form, setForm] = useState<CompanyFormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof CompanyFormData, string>>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    setErrors({});
+    setForm(
+      initial
+        ? {
+            company_name: initial.company_name,
+            signing_authority: initial.signing_authority,
+            gst_number: initial.gst_number,
+            registered_address: initial.registered_address,
+            warehouse_location: initial.warehouse_location,
+            area_sqft: initial.area_sqft,
+            rate_per_sqft: initial.rate_per_sqft,
+            possession_date: initial.possession_date,
+            annual_increment: initial.annual_increment,
+            next_increment_date: initial.next_increment_date,
+            invoice_send_day: initial.invoice_send_day,
+            rent_due_day: initial.rent_due_day,
+            reminder_buffer_days: initial.reminder_buffer_days,
+          }
+        : { ...emptyForm }
+    );
+  }, [open, initial]);
 
   if (!open) return null;
 

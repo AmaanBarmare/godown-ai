@@ -18,5 +18,6 @@ const app = initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const functions = getFunctions(app);
+// Explicit region so callable functions resolve correctly
+export const functions = getFunctions(app, "us-central1");
 export const analytics = getAnalytics(app);

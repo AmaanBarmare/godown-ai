@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
 import { z } from "zod";
@@ -48,21 +48,27 @@ function MemberModal({
   initial?: Member;
   saving: boolean;
 }) {
-  const [form, setForm] = useState<MemberFormData>(
-    initial
-      ? {
-          member_type: initial.member_type,
-          name: initial.name,
-          address: initial.address,
-          gst_number: initial.gst_number,
-          bank_name: initial.bank_name,
-          branch: initial.branch,
-          ifsc_code: initial.ifsc_code,
-          account_number: initial.account_number,
-        }
-      : { ...emptyForm }
-  );
+  const [form, setForm] = useState<MemberFormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof MemberFormData, string>>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    setErrors({});
+    setForm(
+      initial
+        ? {
+            member_type: initial.member_type,
+            name: initial.name,
+            address: initial.address,
+            gst_number: initial.gst_number,
+            bank_name: initial.bank_name,
+            branch: initial.branch,
+            ifsc_code: initial.ifsc_code,
+            account_number: initial.account_number,
+          }
+        : { ...emptyForm }
+    );
+  }, [open, initial]);
 
   if (!open) return null;
 

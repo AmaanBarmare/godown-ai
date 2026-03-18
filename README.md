@@ -58,6 +58,42 @@ This shift from "AI-powered data extraction" to "contract-driven document genera
 
 ---
 
+## Engineering Challenges & Bugs Fixed
+
+This project isn’t a toy CRUD app — it’s a production-style workflow spanning **browser PDF generation**, **file uploads**, **serverless email**, and **state transitions**. Along the way, I hit the kind of issues you only see when you ship, and fixed them systematically.
+
+### Shipping the “new version” of Cloud Functions
+
+- **Problem**: Deploys kept showing the *old* function (`parseInvoice`) even though the code had been rewritten to `sendInvoice` / `sendPaymentReminder`.
+- **Fix**: The deploy pipeline was reading the compiled output (`functions/lib`) and it hadn’t been rebuilt. Rebuilding with `npm run build` updated the compiled entrypoint, and the deploy then correctly removed the legacy function and published the new ones.
+
+### Serverless deploy blocked by IAM / build permissions
+
+- **Problem**: Cloud Functions deploys failed with “missing permission on the build service account”, even though I was an owner.
+- **Fix**: Traced the failure to Cloud Build service-account policy changes and missing project APIs/roles. After enabling the required API and granting the correct build permissions, deploys became reliable.
+
+### Node runtime deprecation risk (future-proofing)
+
+- **Problem**: Functions were running on a runtime scheduled for deprecation (Node 20).
+- **Fix**: Upgraded Cloud Functions runtime to **Node 22** and redeployed so the backend stays on a supported runtime.
+
+### UI edit modals not pre-filling (real UX bug)
+
+- **Problem**: The Companies/Members/Email Settings “Edit” modals opened with empty fields even though the list showed correct data.
+- **Fix**: The modal forms were initialized only once; switching between items didn’t re-sync form state. Added state reset/re-hydration on open so edits always start with the correct defaults.
+
+### “Internal error” in the dashboard with no obvious clue
+
+- **Problem**: The UI showed generic errors during “Generate & Send” and “Send Reminder”, with no actionable message.
+- **Fix**: Improved client-side error handling to surface the actual failure code/message (instead of a vague toast), and pinned Cloud Functions to the correct region so calls resolve consistently.
+
+### Reminder email worked, but status update could fail
+
+- **Problem**: Even when a reminder email could be sent, the server-side status update could fail due to runtime permissions, causing the whole action to look like a failure.
+- **Fix**: Made the server-side status update **best-effort** (log if it fails, but don’t block the email). The UI already updates status client-side, so the user still gets the correct outcome.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
