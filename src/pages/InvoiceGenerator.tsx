@@ -12,7 +12,8 @@ import { useCompanies } from "@/hooks/use-companies";
 import { useMembers } from "@/hooks/use-members";
 import { useEmailMappings } from "@/hooks/use-email-mappings";
 import { useInvoices, useAddInvoice } from "@/hooks/use-invoices";
-import { storage } from "@/integrations/firebase/config";
+import { storage, db } from "@/integrations/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/integrations/firebase/config";
@@ -66,9 +67,22 @@ export default function InvoiceGenerator() {
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
   const selectedMember = members.find((m) => m.id === selectedMemberId);
 
-  // Auto-generate invoice number
+  // Auto-generate invoice number from counter doc (syncs with auto-generated invoices)
   useEffect(() => {
-    setInvoiceNumber(generateInvoiceNumber(invoices.length));
+    async function fetchInvoiceNumber() {
+      try {
+        const counterDoc = await getDoc(doc(db, "counters", "invoice_count"));
+        if (counterDoc.exists()) {
+          const count = counterDoc.data().count as number;
+          setInvoiceNumber(generateInvoiceNumber(count));
+        } else {
+          setInvoiceNumber(generateInvoiceNumber(invoices.length));
+        }
+      } catch {
+        setInvoiceNumber(generateInvoiceNumber(invoices.length));
+      }
+    }
+    fetchInvoiceNumber();
   }, [invoices.length]);
 
   // Auto-fill from selected company
@@ -86,6 +100,10 @@ export default function InvoiceGenerator() {
         setSenderEmail(mapping.sender_email || "");
         setCc(mapping.cc || "");
         setBcc(mapping.bcc || "");
+      }
+      // Auto-select linked member if configured
+      if (selectedCompany.member_id) {
+        setSelectedMemberId(selectedCompany.member_id);
       }
     }
   }, [selectedCompanyId, selectedCompany, emailMappings]);

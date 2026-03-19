@@ -186,6 +186,33 @@ Indian tenants deduct tax (TDS) before paying. The payment confirmation screen e
 
 ---
 
+## Auto-Send Invoices
+
+Companies can be configured to automatically generate and send invoices on their scheduled send day each month — no manual intervention needed.
+
+### How to Enable
+
+1. Edit a company on the Companies page
+2. Set a **Default Member** (the landlord/payee for this warehouse)
+3. Toggle **Auto-Send Invoices** on
+4. Ensure an email mapping exists for this company (on the Settings page)
+
+### How It Works
+
+- A scheduled Cloud Function runs **daily at 9:00 AM IST**
+- It checks all companies where `auto_send` is `true` and today matches `invoice_send_day`
+- For each eligible company, it generates a PDF invoice server-side, emails it via Resend, and logs it to Firestore
+
+### Guard Rails
+
+- **Duplicate prevention**: If an invoice already exists for the same company and period, it's skipped
+- **Missing data**: Companies without a linked member, email mapping, or GST numbers are skipped with a log message
+- **Isolation**: One company failing does not stop others from being processed
+- Auto-generated invoices are tagged with `auto_generated: true` in Firestore
+- The manual Invoice Generator continues working unchanged
+
+---
+
 ## Bugs Caught & Fixed
 
 Real bugs I found and fixed during development and dogfooding. These aren't theoretical — each one was discovered by actually using the app end-to-end.
@@ -259,7 +286,8 @@ The app checks for the user profile immediately after the account is created. Si
 company_name, signing_authority, gst_number, registered_address,
 warehouse_location, area_sqft, rate_per_sqft, monthly_base_rent,
 possession_date, annual_increment, next_increment_date,
-invoice_send_day, rent_due_day, reminder_buffer_days
+invoice_send_day, rent_due_day, reminder_buffer_days,
+member_id (FK → members), auto_send (boolean)
 ```
 
 ### `members` — Landlord / Payee Profiles
@@ -452,6 +480,7 @@ First-time setup is restricted to a single designated admin email. The setup fun
 
 - [x] Firebase Authentication with invite-only signup and role-based access
 - [x] Auth race condition fix for invited users
+- [x] Scheduled auto-send invoices (daily at 9 AM IST)
 - [ ] Automatic rent increment notifications based on contract dates
 - [ ] Email template customization
 - [ ] Multi-warehouse / multi-landlord support

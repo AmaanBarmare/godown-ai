@@ -14,6 +14,8 @@ import {
   useUpdateCompany,
   useDeleteCompany,
 } from "@/hooks/use-companies";
+import { useMembers } from "@/hooks/use-members";
+import { Switch } from "@/components/ui/switch";
 import type { Company } from "@/integrations/firebase/types";
 
 const companySchema = z.object({
@@ -30,7 +32,12 @@ const companySchema = z.object({
   invoice_send_day: z.number().int().min(1).max(28, "Must be 1–28"),
   rent_due_day: z.number().int().min(1).max(28, "Must be 1–28"),
   reminder_buffer_days: z.number().int().min(0),
-});
+  member_id: z.string().optional(),
+  auto_send: z.boolean().optional(),
+}).refine(
+  (data) => !data.auto_send || (data.member_id && data.member_id.length > 0),
+  { message: "A default member is required when auto-send is enabled", path: ["member_id"] }
+);
 
 type CompanyFormData = z.infer<typeof companySchema>;
 
@@ -48,6 +55,8 @@ const emptyForm: CompanyFormData = {
   invoice_send_day: 25,
   rent_due_day: 5,
   reminder_buffer_days: 5,
+  member_id: "",
+  auto_send: false,
 };
 
 function CompanyModal({
@@ -65,6 +74,7 @@ function CompanyModal({
 }) {
   const [form, setForm] = useState<CompanyFormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof CompanyFormData, string>>>({});
+  const { data: membersList = [] } = useMembers();
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +95,8 @@ function CompanyModal({
             invoice_send_day: initial.invoice_send_day,
             rent_due_day: initial.rent_due_day,
             reminder_buffer_days: initial.reminder_buffer_days,
+            member_id: initial.member_id || "",
+            auto_send: initial.auto_send || false,
           }
         : { ...emptyForm }
     );
@@ -109,7 +121,7 @@ function CompanyModal({
     onSave(result.data);
   };
 
-  const update = (field: keyof CompanyFormData, value: string | number) => {
+  const update = (field: keyof CompanyFormData, value: string | number | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
@@ -223,6 +235,36 @@ function CompanyModal({
           {numField("invoice_send_day", "Invoice Send Day (1–28)", "e.g. 25")}
           {numField("rent_due_day", "Rent Due Day (1–28)", "e.g. 5")}
           {numField("reminder_buffer_days", "Reminder Buffer Days", "e.g. 5")}
+
+          {/* Default Member */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Default Member (Payee)
+            </label>
+            <select
+              value={form.member_id || ""}
+              onChange={(e) => update("member_id", e.target.value)}
+              className={`w-full px-3 py-2.5 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.member_id ? "border-destructive" : "border-input"}`}
+            >
+              <option value="">Select member...</option>
+              {membersList.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            {errors.member_id && <p className="text-xs text-destructive mt-1">{errors.member_id}</p>}
+          </div>
+
+          {/* Auto-Send Toggle */}
+          <div className="flex items-center justify-between sm:col-span-2 py-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block">Auto-Send Invoices</label>
+              <p className="text-xs text-muted-foreground mt-0.5">Automatically generate and send invoices on the invoice send day</p>
+            </div>
+            <Switch
+              checked={form.auto_send || false}
+              onCheckedChange={(checked) => update("auto_send", checked as any)}
+            />
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted">
@@ -257,9 +299,12 @@ export default function Companies() {
 
   const handleSave = async (data: CompanyFormData) => {
     try {
+      const { member_id, auto_send, ...rest } = data;
       const payload = {
-        ...data,
+        ...rest,
         monthly_base_rent: data.area_sqft * data.rate_per_sqft,
+        member_id: member_id || "",
+        auto_send: auto_send || false,
       };
       if (editing) {
         await updateCompany.mutateAsync({ id: editing.id, ...payload } as Company);
@@ -323,12 +368,13 @@ export default function Companies() {
                   <th className="px-6 py-3.5 font-medium">Rate/sqft</th>
                   <th className="px-6 py-3.5 font-medium">Monthly Rent</th>
                   <th className="px-6 py-3.5 font-medium">Next Increment</th>
+                  <th className="px-6 py-3.5 font-medium">Auto-Send</th>
                   <th className="px-6 py-3.5 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
+                  <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
                 ) : filtered.length > 0 ? filtered.map((c) => (
                   <tr key={c.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-card-foreground flex items-center gap-2">
@@ -340,6 +386,11 @@ export default function Companies() {
                     <td className="px-6 py-4 font-semibold text-card-foreground">₹{c.monthly_base_rent.toLocaleString("en-IN")}</td>
                     <td className="px-6 py-4 text-muted-foreground">
                       {c.next_increment_date ? format(new Date(c.next_increment_date), "MMM dd, yyyy") : "—"}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.auto_send ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
+                        {c.auto_send ? "On" : "Off"}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
@@ -354,7 +405,7 @@ export default function Companies() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
                       {companies.length === 0
                         ? 'No companies yet. Click "Add Company" to get started.'
                         : "No companies match your search."}

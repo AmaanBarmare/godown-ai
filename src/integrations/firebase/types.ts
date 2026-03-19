@@ -59,6 +59,8 @@ export interface Company {
   invoice_send_day: number;
   rent_due_day: number;
   reminder_buffer_days: number;
+  member_id?: string;
+  auto_send?: boolean;
   created_at?: string;
   updated_at?: string;
 }

@@ -1,9 +1,13 @@
 import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { Resend } from "resend";
 import * as crypto from "crypto";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import { format } from "date-fns";
 
 admin.initializeApp();
 
@@ -550,3 +554,346 @@ async function handleUpdateUserStatus(
 
   return { success: true };
 }
+
+// ─── Auto-Send Invoices (Scheduled) ──────────────────────────────────────────
+
+interface CompanyDoc {
+  company_name: string;
+  signing_authority: string;
+  gst_number: string;
+  registered_address: string;
+  warehouse_location: string;
+  area_sqft: number;
+  rate_per_sqft: number;
+  monthly_base_rent: number;
+  invoice_send_day: number;
+  rent_due_day: number;
+  member_id?: string;
+  auto_send?: boolean;
+}
+
+interface MemberDoc {
+  name: string;
+  address: string;
+  gst_number: string;
+  bank_name: string;
+  branch: string;
+  ifsc_code: string;
+  account_number: string;
+}
+
+interface EmailMappingDoc {
+  company: string;
+  sender_email: string;
+  primary_email: string;
+  cc: string;
+  bcc: string;
+}
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function detectGstType(companyGst: string, memberGst: string): { type: "IGST" | "CGST+SGST"; rate: number } {
+  const companyState = companyGst.substring(0, 2);
+  const memberState = memberGst.substring(0, 2);
+  if (companyState === memberState) {
+    return { type: "CGST+SGST", rate: 18 };
+  }
+  return { type: "IGST", rate: 18 };
+}
+
+function generateInvoicePdf(
+  member: MemberDoc,
+  company: CompanyDoc,
+  invoiceData: {
+    invoiceNumber: string;
+    invoiceDate: string;
+    invoicePeriod: string;
+    dueDate: string;
+    areaSqft: number;
+    ratePerSqft: number;
+    baseAmount: number;
+    gstType: "IGST" | "CGST+SGST";
+    gstAmount: number;
+    totalAmount: number;
+  }
+): Buffer {
+  const doc = new jsPDF();
+
+  // Header - Member (landlord) info
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text(member.name, 14, 20);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(member.address, 14, 27);
+  doc.text(`GST: ${member.gst_number}`, 14, 33);
+
+  // Invoice metadata
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("INVOICE", 150, 20);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Invoice No: ${invoiceData.invoiceNumber}`, 150, 28);
+  doc.text(`Date: ${invoiceData.invoiceDate}`, 150, 34);
+  doc.text(`Period: ${invoiceData.invoicePeriod}`, 150, 40);
+  doc.text(`Due Date: ${invoiceData.dueDate}`, 150, 46);
+
+  // Divider
+  doc.setDrawColor(200);
+  doc.line(14, 52, 196, 52);
+
+  // Tenant block
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("Bill To:", 14, 60);
+  doc.setFont("helvetica", "normal");
+  doc.text(company.company_name, 14, 66);
+  doc.text(`Signing Authority: ${company.signing_authority}`, 14, 72);
+  doc.text(`GST: ${company.gst_number}`, 14, 78);
+  doc.text(company.registered_address, 14, 84);
+
+  // Line items table
+  autoTable(doc, {
+    startY: 94,
+    head: [["Description", "Area (sq.ft.)", "Rate/sq.ft. (INR)", "Amount (INR)"]],
+    body: [
+      [
+        `Warehouse Rent - ${invoiceData.invoicePeriod}`,
+        invoiceData.areaSqft.toLocaleString("en-IN"),
+        invoiceData.ratePerSqft.toLocaleString("en-IN"),
+        invoiceData.baseAmount.toLocaleString("en-IN"),
+      ],
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [41, 65, 148] },
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY + 5;
+
+  // GST row
+  doc.setFontSize(10);
+  if (invoiceData.gstType === "CGST+SGST") {
+    doc.text(`CGST (9%): INR ${(invoiceData.gstAmount / 2).toLocaleString("en-IN")}`, 130, finalY);
+    doc.text(`SGST (9%): INR ${(invoiceData.gstAmount / 2).toLocaleString("en-IN")}`, 130, finalY + 6);
+  } else {
+    doc.text(`IGST (18%): INR ${invoiceData.gstAmount.toLocaleString("en-IN")}`, 130, finalY);
+  }
+
+  const totalY = invoiceData.gstType === "CGST+SGST" ? finalY + 14 : finalY + 8;
+  doc.setFont("helvetica", "bold");
+  doc.text(`Total Payable: INR ${invoiceData.totalAmount.toLocaleString("en-IN")}`, 130, totalY);
+
+  // Payment instructions
+  const payY = totalY + 16;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("Payment Details:", 14, payY);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Bank: ${member.bank_name}`, 14, payY + 6);
+  doc.text(`Branch: ${member.branch}`, 14, payY + 12);
+  doc.text(`IFSC: ${member.ifsc_code}`, 14, payY + 18);
+  doc.text(`Account No: ${member.account_number}`, 14, payY + 24);
+
+  return Buffer.from(doc.output("arraybuffer"));
+}
+
+async function getNextInvoiceNumber(): Promise<string> {
+  const db = admin.firestore();
+  const counterRef = db.collection("counters").doc("invoice_count");
+
+  const newCount = await db.runTransaction(async (tx) => {
+    const counterDoc = await tx.get(counterRef);
+    let current: number;
+    if (!counterDoc.exists) {
+      // Seed from existing invoices count
+      const invoicesSnap = await db.collection("invoices").count().get();
+      current = invoicesSnap.data().count;
+    } else {
+      current = (counterDoc.data()!.count as number) || 0;
+    }
+    const next = current + 1;
+    tx.set(counterRef, { count: next });
+    return next;
+  });
+
+  return `INV-${String(newCount).padStart(3, "0")}`;
+}
+
+export const autoSendInvoices = onSchedule(
+  {
+    schedule: "30 3 * * *", // 3:30 AM UTC = 9:00 AM IST
+    timeZone: "Asia/Kolkata",
+    secrets: [RESEND_API_KEY],
+  },
+  async () => {
+    const db = admin.firestore();
+    const now = new Date();
+    // Get today's day of month in IST
+    const istDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const todayDay = istDate.getDate();
+    const currentMonth = istDate.getMonth();
+    const currentYear = istDate.getFullYear();
+    const invoicePeriod = `${MONTHS[currentMonth]} ${currentYear}`;
+
+    console.log(`[autoSendInvoices] Running for day ${todayDay}, period: ${invoicePeriod}`);
+
+    // Query all companies with auto_send enabled
+    const companiesSnap = await db
+      .collection("companies")
+      .where("auto_send", "==", true)
+      .get();
+
+    const eligible = companiesSnap.docs.filter((doc) => {
+      const data = doc.data() as CompanyDoc;
+      return data.invoice_send_day === todayDay && data.member_id;
+    });
+
+    console.log(`[autoSendInvoices] Found ${companiesSnap.size} auto-send companies, ${eligible.length} eligible today`);
+
+    let succeeded = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const companyDoc of eligible) {
+      const company = companyDoc.data() as CompanyDoc;
+      const companyName = company.company_name;
+
+      try {
+        // Fetch linked member
+        const memberDoc = await db.collection("members").doc(company.member_id!).get();
+        if (!memberDoc.exists) {
+          console.log(`[autoSendInvoices] Skipping ${companyName}: member ${company.member_id} not found`);
+          skipped++;
+          continue;
+        }
+        const member = memberDoc.data() as MemberDoc;
+
+        // Fetch email mapping
+        const mappingsSnap = await db.collection("email_mappings").get();
+        const mapping = mappingsSnap.docs
+          .map((d) => d.data() as EmailMappingDoc)
+          .find((m) => m.company.toLowerCase() === companyName.toLowerCase());
+        if (!mapping) {
+          console.log(`[autoSendInvoices] Skipping ${companyName}: no email mapping found`);
+          skipped++;
+          continue;
+        }
+
+        // Validate GST numbers
+        if (!company.gst_number || !member.gst_number) {
+          console.log(`[autoSendInvoices] Skipping ${companyName}: missing GST number`);
+          skipped++;
+          continue;
+        }
+
+        // Duplicate check
+        const existingInvoices = await db
+          .collection("invoices")
+          .where("company", "==", companyName)
+          .where("invoice_period", "==", invoicePeriod)
+          .limit(1)
+          .get();
+        if (!existingInvoices.empty) {
+          console.log(`[autoSendInvoices] Skipping ${companyName}: invoice already exists for ${invoicePeriod}`);
+          skipped++;
+          continue;
+        }
+
+        // Calculate amounts
+        const baseAmount = company.area_sqft * company.rate_per_sqft;
+        const gstInfo = detectGstType(company.gst_number, member.gst_number);
+        const gstAmount = Math.round(baseAmount * gstInfo.rate / 100);
+        const totalAmount = baseAmount + gstAmount;
+
+        // Get invoice number atomically
+        const invoiceNumber = await getNextInvoiceNumber();
+
+        // Compute dates
+        const invoiceDate = format(istDate, "dd MMM yyyy");
+        const dueDateObj = new Date(currentYear, currentMonth + 1, company.rent_due_day);
+        const dueDate = format(dueDateObj, "dd MMM yyyy");
+        const dueDateIso = dueDateObj.toISOString().split("T")[0];
+
+        // Generate PDF
+        const pdfBuffer = generateInvoicePdf(member, company, {
+          invoiceNumber,
+          invoiceDate,
+          invoicePeriod,
+          dueDate,
+          areaSqft: company.area_sqft,
+          ratePerSqft: company.rate_per_sqft,
+          baseAmount,
+          gstType: gstInfo.type,
+          gstAmount,
+          totalAmount,
+        });
+
+        // Upload PDF to Storage
+        const filePath = `invoices/${invoiceNumber}.pdf`;
+        const bucket = admin.storage().bucket();
+        const file = bucket.file(filePath);
+        await file.save(pdfBuffer, { contentType: "application/pdf" });
+
+        // Send email via Resend
+        const resend = getResend();
+        await resend.emails.send({
+          from: mapping.sender_email || "invoices@example.com",
+          to: [mapping.primary_email],
+          cc: mapping.cc ? [mapping.cc] : undefined,
+          bcc: mapping.bcc ? [mapping.bcc] : undefined,
+          subject: `Invoice ${invoiceNumber} - ${invoicePeriod}`,
+          html: `
+            <p>Dear ${companyName},</p>
+            <p>Please find attached invoice <strong>${invoiceNumber}</strong> for the period of <strong>${invoicePeriod}</strong>.</p>
+            <p>Amount: <strong>INR ${totalAmount.toLocaleString("en-IN")}</strong></p>
+            <p>Due Date: <strong>${dueDate}</strong></p>
+            <p>Please process the payment at your earliest convenience.</p>
+            <p>Best regards,<br/>Warehouse Rentals</p>
+          `,
+          attachments: [
+            {
+              filename: `${invoiceNumber}.pdf`,
+              content: pdfBuffer.toString("base64"),
+            },
+          ],
+        });
+
+        // Save invoice to Firestore
+        await db.collection("invoices").add({
+          company: companyName,
+          amount: `INR ${totalAmount.toLocaleString("en-IN")}`,
+          invoice_date: istDate.toISOString().split("T")[0],
+          recipient_email: mapping.primary_email,
+          sender_email: mapping.sender_email || "",
+          cc: mapping.cc || "",
+          bcc: mapping.bcc || "",
+          file_name: `${invoiceNumber}.pdf`,
+          status: "Sent",
+          invoice_number: invoiceNumber,
+          invoice_period: invoicePeriod,
+          member_id: company.member_id,
+          base_amount: baseAmount,
+          gst_type: gstInfo.type,
+          gst_rate: gstInfo.rate,
+          gst_amount: gstAmount,
+          total_amount: totalAmount,
+          due_date: dueDateIso,
+          auto_generated: true,
+          created_at: now.toISOString(),
+        });
+
+        console.log(`[autoSendInvoices] Sent ${invoiceNumber} to ${mapping.primary_email} for ${companyName}`);
+        succeeded++;
+      } catch (err) {
+        console.error(`[autoSendInvoices] Failed for ${companyName}:`, err);
+        failed++;
+      }
+    }
+
+    console.log(`[autoSendInvoices] Done. Succeeded: ${succeeded}, Skipped: ${skipped}, Failed: ${failed}`);
+  }
+);
