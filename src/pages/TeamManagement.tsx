@@ -97,6 +97,45 @@ export default function TeamManagement() {
           <p className="text-muted-foreground">Invite users and manage team access</p>
         </div>
 
+        {/* Role Descriptions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Roles & Permissions</CardTitle>
+            <CardDescription>What each role can do in GodownAI</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg border p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-destructive" />
+                  <Badge variant="destructive">Admin</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Full access. Can manage team (invite/revoke/disable users), manage companies, members, email settings, generate &amp; send invoices, send reminders, and confirm payments.
+                </p>
+              </div>
+              <div className="rounded-lg border p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <Badge variant="default">Manager</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Operational access. Can manage companies, members, email settings, generate &amp; send invoices, send payment reminders, and confirm payments. Cannot manage team.
+                </p>
+              </div>
+              <div className="rounded-lg border p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  <Badge variant="secondary">Member</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  View-only access. Can view the dashboard, companies, members, invoice history, and payment status. Cannot generate invoices, send emails, or manage settings.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Invite Form */}
         <Card>
           <CardHeader>

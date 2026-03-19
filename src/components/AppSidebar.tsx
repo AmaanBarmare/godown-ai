@@ -17,12 +17,15 @@ import {
   LogOut,
 } from "lucide-react";
 
-const navItems = [
+const viewNavItems = [
   { title: "Dashboard", path: "/", icon: LayoutDashboard },
   { title: "Companies", path: "/companies", icon: Building2 },
   { title: "Members", path: "/members", icon: Users },
-  { title: "Invoice Generator", path: "/invoice-generator", icon: FilePlus },
   { title: "Invoice History", path: "/invoice-history", icon: History },
+];
+
+const managerNavItems = [
+  { title: "Invoice Generator", path: "/invoice-generator", icon: FilePlus },
   { title: "Payment Reminder", path: "/payment-reminder", icon: Bell },
   { title: "Payment Confirmation", path: "/payment-confirmation", icon: CheckCircle },
   { title: "Email Settings", path: "/settings", icon: Settings },
@@ -37,8 +40,10 @@ export function AppSidebar() {
   const location = useLocation();
   const { userProfile, signOut } = useAuth();
 
+  const isAdminOrManager = userProfile?.role === "admin" || userProfile?.role === "manager";
   const allNavItems = [
-    ...navItems,
+    ...viewNavItems,
+    ...(isAdminOrManager ? managerNavItems : []),
     ...(userProfile?.role === "admin" ? adminNavItems : []),
   ];
 

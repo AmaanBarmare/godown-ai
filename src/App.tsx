@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
+import { ManagerRoute } from "@/components/ManagerRoute";
 import Index from "./pages/Index";
 import Companies from "./pages/Companies";
 import InvoiceGenerator from "./pages/InvoiceGenerator";
@@ -40,15 +41,17 @@ const App = () => (
             {/* Admin routes */}
             <Route path="/team" element={<AdminRoute><TeamManagement /></AdminRoute>} />
 
-            {/* Protected app routes */}
+            {/* View-only routes (all roles) */}
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/companies" element={<ProtectedRoute><Companies /></ProtectedRoute>} />
-            <Route path="/invoice-generator" element={<ProtectedRoute><InvoiceGenerator /></ProtectedRoute>} />
             <Route path="/invoice-history" element={<ProtectedRoute><InvoiceHistory /></ProtectedRoute>} />
             <Route path="/members" element={<ProtectedRoute><Members /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-            <Route path="/payment-reminder" element={<ProtectedRoute><PaymentReminder /></ProtectedRoute>} />
-            <Route path="/payment-confirmation" element={<ProtectedRoute><PaymentConfirmation /></ProtectedRoute>} />
+
+            {/* Operational routes (admin + manager only) */}
+            <Route path="/invoice-generator" element={<ManagerRoute><InvoiceGenerator /></ManagerRoute>} />
+            <Route path="/settings" element={<ManagerRoute><Settings /></ManagerRoute>} />
+            <Route path="/payment-reminder" element={<ManagerRoute><PaymentReminder /></ManagerRoute>} />
+            <Route path="/payment-confirmation" element={<ManagerRoute><PaymentConfirmation /></ManagerRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

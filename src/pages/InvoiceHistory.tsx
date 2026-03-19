@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Search } from "lucide-react";
+import { Search, Eye, Download, X, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useInvoices } from "@/hooks/use-invoices";
+import { storage } from "@/integrations/firebase/config";
+import { ref, getDownloadURL } from "firebase/storage";
+import { toast } from "sonner";
+import type { Invoice } from "@/integrations/firebase/types";
 
 const statusColors: Record<string, string> = {
   Sent: "bg-success/10 text-success",
@@ -14,7 +18,44 @@ const statusColors: Record<string, string> = {
 export default function InvoiceHistory() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const { data: invoices = [], isLoading } = useInvoices();
+
+  const handleViewInvoice = async (inv: Invoice) => {
+    if (!inv.file_name) {
+      toast.error("No PDF file associated with this invoice");
+      return;
+    }
+    setSelectedInvoice(inv);
+    setPdfLoading(true);
+    try {
+      const fileRef = ref(storage, `invoices/${inv.file_name}`);
+      const url = await getDownloadURL(fileRef);
+      setPdfUrl(url);
+    } catch {
+      toast.error("Failed to load invoice PDF");
+      setSelectedInvoice(null);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setSelectedInvoice(null);
+    setPdfUrl(null);
+  };
+
+  const handleDownload = () => {
+    if (pdfUrl && selectedInvoice) {
+      const a = document.createElement("a");
+      a.href = pdfUrl;
+      a.target = "_blank";
+      a.download = selectedInvoice.file_name || "invoice.pdf";
+      a.click();
+    }
+  };
 
   const filtered = invoices.filter((inv) => {
     const matchSearch =
@@ -73,11 +114,12 @@ export default function InvoiceHistory() {
                   <th className="px-6 py-3.5 font-medium">Sent Date</th>
                   <th className="px-6 py-3.5 font-medium">Due Date</th>
                   <th className="px-6 py-3.5 font-medium">Status</th>
+                  <th className="px-6 py-3.5 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
                 ) : filtered.length > 0 ? filtered.map((inv) => (
                   <tr key={inv.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-6 py-4 font-medium text-card-foreground">{inv.invoice_number || "—"}</td>
@@ -97,14 +139,75 @@ export default function InvoiceHistory() {
                         {inv.status}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => handleViewInvoice(inv)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                        title="View Invoice PDF"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View
+                      </button>
+                    </td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No invoices found.</td></tr>
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">No invoices found.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* PDF Viewer Modal */}
+        {selectedInvoice && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                <div>
+                  <h2 className="text-lg font-semibold text-card-foreground">
+                    {selectedInvoice.invoice_number || "Invoice"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedInvoice.company} — {selectedInvoice.invoice_period || ""}
+                    {selectedInvoice.total_amount ? ` — ₹${selectedInvoice.total_amount.toLocaleString("en-IN")}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {pdfUrl && (
+                    <button
+                      onClick={handleDownload}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download
+                    </button>
+                  )}
+                  <button
+                    onClick={handleCloseViewer}
+                    className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              {/* PDF Content */}
+              <div className="flex-1 overflow-hidden">
+                {pdfLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : pdfUrl ? (
+                  <iframe
+                    src={pdfUrl}
+                    className="w-full h-full"
+                    title={`Invoice ${selectedInvoice.invoice_number}`}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
