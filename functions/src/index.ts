@@ -11,7 +11,8 @@ const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
 const APP_URL = "https://godown-ai.vercel.app";
 const INVITE_EXPIRY_DAYS = 7;
-const INVITE_SENDER_EMAIL = "admin@oltaflock.ai";
+// TODO: Switch to "admin@oltaflock.ai" once domain is verified in Resend
+const INVITE_SENDER_EMAIL = "onboarding@resend.dev";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

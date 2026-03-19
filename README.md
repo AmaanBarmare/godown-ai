@@ -379,6 +379,8 @@ npm run dev    # Frontend at http://localhost:8080
 
 Cloud Functions use `RESEND_API_KEY` via Firebase secret management (not `.env`).
 
+> **Note:** Invite and system emails currently send from `onboarding@resend.dev` (Resend's test sender) because the `oltaflock.ai` domain is not yet verified in Resend. Once domain DNS records are added and verified in the [Resend dashboard](https://resend.com/domains), update `INVITE_SENDER_EMAIL` in `functions/src/index.ts` back to `admin@oltaflock.ai`.
+
 ### Scripts
 
 | Command | Description |
