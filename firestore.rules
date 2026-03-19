@@ -1,8 +1,82 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isBootstrapAdmin() {
+      return isAuth() && request.auth.token.email == 'admin@oltaflock.ai';
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return isAuth() && userDoc().status == 'active';
+    }
+
+    function isAdmin() {
+      return isActive() && userDoc().role == 'admin';
+    }
+
+    function userOrg() {
+      return userDoc().organizationId;
+    }
+
+    // Organizations: active users can read own org
+    // Bootstrap: admin@oltaflock.ai can create (one-time setup)
+    match /organizations/{orgId} {
+      allow read: if isBootstrapAdmin() || (isActive() && userOrg() == orgId);
+      allow create: if isBootstrapAdmin();
+      allow update, delete: if false;
+    }
+
+    // Users: auth users can read own doc or same-org docs
+    // Bootstrap: admin@oltaflock.ai can create their own user doc
+    match /users/{userId} {
+      allow read: if isAuth() && (
+        request.auth.uid == userId ||
+        (isActive() && userOrg() == resource.data.organizationId)
+      );
+      allow create: if isBootstrapAdmin() && request.auth.uid == userId;
+      allow update, delete: if false;
+    }
+
+    // Invites: admin can read, writes managed by Cloud Functions
+    match /invites/{inviteId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // _requests: authenticated users can create their own requests,
+    // can read their own requests (to listen for trigger results),
+    // no client updates or deletes
+    match /_requests/{requestId} {
+      allow create: if isAuth()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == "pending";
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Business data: active authenticated users can read/write
+    match /companies/{companyId} {
+      allow read, write: if isActive();
+    }
+
+    match /members/{memberId} {
+      allow read, write: if isActive();
+    }
+
+    match /invoices/{invoiceId} {
+      allow read, write: if isActive();
+    }
+
+    match /email_mappings/{mappingId} {
+      allow read, write: if isActive();
     }
   }
 }

@@ -1,3 +1,37 @@
+export interface Organization {
+  id: string;
+  name: string;
+  primaryAdminEmail: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppUser {
+  id: string;
+  email: string;
+  fullName: string;
+  organizationId: string;
+  role: "admin" | "manager" | "member";
+  status: "active" | "disabled";
+  invitedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  organizationId: string;
+  role: "admin" | "manager" | "member";
+  status: "invited" | "accepted" | "expired" | "revoked";
+  tokenHash: string;
+  expiresAt: string;
+  invitedBy: string;
+  acceptedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface EmailMapping {
   id: string;
   company: string;

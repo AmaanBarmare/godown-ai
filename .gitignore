@@ -50,3 +50,7 @@ functions/lib/
 
 # Functions dependencies (installed separately)
 functions/node_modules
+.vercel
+
+# Dev prompts
+superprompt.md

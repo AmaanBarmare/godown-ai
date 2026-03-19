@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard,
   Building2,
-  FileText,
   Users,
   Settings,
   ChevronLeft,
@@ -13,6 +13,8 @@ import {
   Bell,
   CheckCircle,
   History,
+  UserPlus,
+  LogOut,
 } from "lucide-react";
 
 const navItems = [
@@ -26,9 +28,19 @@ const navItems = [
   { title: "Email Settings", path: "/settings", icon: Settings },
 ];
 
+const adminNavItems = [
+  { title: "Team", path: "/team", icon: UserPlus },
+];
+
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { userProfile, signOut } = useAuth();
+
+  const allNavItems = [
+    ...navItems,
+    ...(userProfile?.role === "admin" ? adminNavItems : []),
+  ];
 
   return (
     <aside
@@ -53,7 +65,7 @@ export function AppSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 py-4 px-2 space-y-1">
-        {navItems.map((item) => {
+        {allNavItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <NavLink
@@ -71,6 +83,24 @@ export function AppSidebar() {
           );
         })}
       </nav>
+
+      {/* User info + sign out */}
+      {userProfile && (
+        <div className="border-t border-sidebar-border px-3 py-3">
+          {!collapsed && (
+            <p className="text-xs text-sidebar-foreground/60 truncate mb-2">
+              {userProfile.email}
+            </p>
+          )}
+          <button
+            onClick={signOut}
+            className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground transition-colors"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!collapsed && <span>Sign Out</span>}
+          </button>
+        </div>
+      )}
 
       {/* Collapse toggle */}
       <button

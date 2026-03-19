@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
+import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -20,4 +21,5 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 // Explicit region so callable functions resolve correctly
 export const functions = getFunctions(app, "us-central1");
+export const auth = getAuth(app);
 export const analytics = getAnalytics(app);
