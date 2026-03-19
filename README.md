@@ -6,7 +6,7 @@
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
 
-A full-stack SPA that automates the entire warehouse rental invoicing lifecycle — from tenant contract configuration and GST-compliant PDF generation to automated email delivery, time-locked payment reminders, and TDS-reconciled payment confirmations.
+A full-stack web app that automates the entire warehouse rental invoicing lifecycle — from tenant contracts and GST-compliant PDF generation to email delivery, payment reminders, and TDS reconciliation.
 
 Built for Indian warehouse landlords who manage multiple godowns (warehouses) and need to generate, send, and track invoices for dozens of tenants each month.
 
@@ -17,95 +17,76 @@ Built for Indian warehouse landlords who manage multiple godowns (warehouses) an
 ## Table of Contents
 
 - [Problem & Motivation](#problem--motivation)
-- [Key Engineering Decisions](#key-engineering-decisions)
+- [Key Design Decisions](#key-design-decisions)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Invoice Generation Flow](#invoice-generation-flow)
 - [Payment Lifecycle](#payment-lifecycle)
+- [Bugs Caught & Fixed](#bugs-caught--fixed)
 - [Tech Stack](#tech-stack)
 - [Database Schema](#database-schema)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Auth & Security](#auth--security)
-- [Evolution: v1 to v2](#evolution-v1--v2)
+- [Evolution: v1 → v2](#evolution-v1--v2)
 - [Roadmap](#roadmap)
 
 ---
 
 ## Problem & Motivation
 
-Warehouse rental invoicing in India is surprisingly manual. Landlords managing multiple godowns juggle spreadsheets, manually calculate GST (IGST vs CGST+SGST depending on state codes), chase tenants for payments, and reconcile TDS deductions by hand every month.
+Warehouse rental invoicing in India is surprisingly manual. Landlords managing multiple godowns juggle spreadsheets, manually calculate GST (which changes depending on whether the tenant is in the same state or a different one), chase tenants for payments, and reconcile tax deductions by hand every month.
 
 I built GodownAI to handle the full lifecycle: **configure once, generate monthly, track payments**.
 
 ### The AI Pivot
 
-The first version used **OpenAI GPT-4o via Cloud Functions** to parse uploaded PDF invoices — extracting company names, amounts, and dates using vision + tool calling, then fuzzy-matching against configured email mappings.
+The first version used **OpenAI GPT-4o** to parse uploaded PDF invoices — extracting company names, amounts, and dates using AI vision, then matching them against configured email mappings.
 
 It worked, but I realized the fundamental flaw: **landlords don't receive invoices — they send them**. The AI parser was solving the wrong problem. A warehouse owner doesn't need to extract data from someone else's invoice — they need to *generate* their own invoices from their tenant contracts.
 
-So I removed the AI pipeline entirely and replaced it with a **contract-driven Invoice Generator** that auto-populates everything from stored company and member records. This shift from "AI-powered data extraction" to "contract-driven document generation" was the key architectural insight — the AI approach was technically impressive but operationally backwards. The deterministic approach is faster, more reliable, cheaper ($0.00 vs ~$0.03/invoice), and actually matches the real workflow.
+So I removed the AI pipeline entirely and replaced it with a **contract-driven Invoice Generator** that auto-populates everything from stored tenant and landlord records. This shift from "AI-powered data extraction" to "contract-driven document generation" was the key product insight — the AI approach was technically impressive but operationally backwards. The deterministic approach is faster, more reliable, and costs nothing ($0.00 vs ~$0.03/invoice).
 
 ---
 
-## Key Engineering Decisions
+## Key Design Decisions
 
 ### GST Auto-Detection
 
-Indian GST law requires different tax treatment based on whether a transaction is intra-state or inter-state. GodownAI automates this by comparing the first 2 digits of the company's and landlord's GST numbers (which encode the state code):
+Indian tax law requires different treatment depending on whether the landlord and tenant are in the same state or not. GodownAI automates this by comparing state codes embedded in GST numbers:
 
-- **Same state** → CGST 9% + SGST 9% (intra-state)
-- **Different state** → IGST 18% (inter-state)
+- **Same state** → CGST 9% + SGST 9%
+- **Different state** → IGST 18%
 
-No manual selection needed. The algorithm runs on every invoice and displays the correct tax breakdown automatically.
+No manual selection needed — the correct tax breakdown appears automatically on every invoice.
 
 ### Client-Side PDF Generation
 
-Invoices are rendered entirely in the browser using `jsPDF` + `jspdf-autotable`. No server-side rendering, no headless Chrome, no Puppeteer — just a clean ~15KB PDF with:
-
-- Landlord letterhead (name, address, GST, bank details)
-- Tenant bill-to block
-- Line items table with area, rate, base amount
-- GST breakdown (IGST or CGST+SGST depending on detection)
-- Bank payment instructions (name, branch, IFSC, account number)
-
-The generated PDF is uploaded to Firebase Storage and attached to the outbound email — all in one user action.
+Invoices are rendered entirely in the browser — no server-side rendering needed. One click produces a clean PDF with landlord letterhead, tenant details, line items, GST breakdown, and bank payment instructions. The PDF is then uploaded to cloud storage and attached to the outbound email, all in a single user action.
 
 ### Time-Locked Payment Reminders
 
-Each company has a configurable `reminder_buffer_days`. The "Send Reminder" button is physically disabled until `today >= due_date + buffer_days`. This prevents premature reminder emails and keeps the landlord-tenant relationship professional. The UI shows exactly when each reminder becomes available.
+Each tenant has a configurable buffer period. The "Send Reminder" button stays disabled until enough days have passed after the due date. This prevents premature reminders and keeps the landlord-tenant relationship professional. The UI shows exactly when each reminder unlocks.
 
 ### TDS Reconciliation
 
-Indian tenants deduct TDS (Tax Deducted at Source) before paying. The payment confirmation form enforces a hard constraint: `amount_received + tds_deducted = invoice_total`. If the numbers don't balance to the rupee, the form blocks submission with an inline error. Both values are stored separately for accounting and tax filing.
+Indian tenants deduct tax (TDS) before paying. The payment confirmation screen enforces a hard rule: `amount received + TDS deducted = invoice total`. If the numbers don't balance to the rupee, the form won't submit. Both values are stored separately for accounting.
 
 ---
 
 ## Features
 
-### Dashboard
-Real-time executive overview with 5 KPI cards (monthly revenue, active companies, sent/paid/pending counts), a 12-month revenue trend bar chart (Recharts), and a recent invoices feed.
-
-### Companies
-Full tenant contract management with 13 configurable fields: company name, signing authority, GST number, registered address, warehouse location, area (sq.ft.), rate per sq.ft., computed monthly rent, possession date, annual increment %, next increment date, invoice send day, rent due day, and reminder buffer days. All Firestore-persisted with search and CRUD operations.
-
-### Members
-Landlord/payee profiles with bank details (name, branch, IFSC code, account number) and GST information. Supports both company and individual member types. Bank details are pulled into generated invoices automatically.
-
-### Invoice Generator
-The core workflow. Selecting a company auto-fills warehouse data, area, and rate. Selecting a member enables GST auto-detection. Email fields auto-populate from configured mappings. Invoice numbers auto-increment (INV-001, INV-002, ...). One click generates the PDF client-side, uploads it to Storage, triggers a Cloud Function to email it via Resend, and logs the invoice to Firestore with status "Sent".
-
-### Invoice History
-Searchable, filterable audit log of all invoices. Filter by status (Sent, Pending, Paid, Failed), search by company name or invoice number. Displays invoice number, company, period, amount, sent date, due date, and status with color-coded badges.
-
-### Payment Reminder
-Shows all unpaid invoices with days overdue calculation. Time-locked send buttons that only activate after the configured buffer period. Sends reminder emails via Cloud Function (no attachment). Automatically transitions invoice status from "Sent" to "Pending".
-
-### Payment Confirmation
-TDS reconciliation interface. For each unpaid invoice, log the amount received after TDS, the TDS amount deducted, date of receipt, and receiving bank account. Form validates that the amounts balance before allowing confirmation. Marks invoice as "Paid" with full payment metadata.
-
-### Email Settings
-Company-to-email mapping configuration: sender email, recipient email, CC, and BCC per company. These mappings auto-fill into the Invoice Generator when a company is selected.
+| Feature | What it does |
+|---|---|
+| **Dashboard** | Real-time overview with 5 KPI cards, a 12-month revenue chart, and a recent invoices feed |
+| **Companies** | Full tenant contract management — 13 fields covering rent terms, GST, warehouse details, and billing schedule |
+| **Members** | Landlord/payee profiles with bank details that auto-populate into generated invoices |
+| **Invoice Generator** | Select a company and member → all fields auto-fill → one click generates PDF, emails it, and logs it |
+| **Invoice History** | Searchable audit log of all invoices, filterable by status (Sent, Pending, Paid, Failed) |
+| **Payment Reminder** | Shows unpaid invoices with days overdue. Time-locked send buttons that unlock after the buffer period |
+| **Payment Confirmation** | TDS reconciliation — log the amount received, TDS deducted, and receiving bank. Validates the math before saving |
+| **Email Settings** | Map each company to sender, recipient, CC, and BCC emails that auto-fill in the Invoice Generator |
+| **Team Management** | Invite-only signup with role-based access (admin, manager, member) |
 
 ---
 
@@ -147,42 +128,35 @@ Company-to-email mapping configuration: sender email, recipient email, CC, and B
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Data flow pattern:** All persistent data lives in Firestore. React Query hooks wrap every Firebase SDK call, providing caching, background refetching, and optimistic updates. Mutations invalidate relevant queries via `queryClient.invalidateQueries()` so the UI stays in sync without manual state management.
+**How data flows:** All data lives in Firestore. React Query hooks wrap every database call, handling caching and keeping the UI in sync automatically when data changes.
 
-**Firestore Trigger pattern (`_requests`):** Privileged operations (invites, org setup, user management) use a write-trigger architecture instead of `onCall` Cloud Functions. The client writes a request document to `_requests/{id}`, a Firestore `onDocumentCreated` trigger (`processRequests`) picks it up, executes the operation with the Admin SDK (bypassing security rules), and writes the result back. The client listens via `onSnapshot` for completion. This avoids Cloud Run IAM / Domain Restricted Sharing issues that block `onCall` functions in some Google Cloud org configurations.
-
-**Forms:** React Hook Form + Zod validation schemas on every CRUD form. Field-level error display, disabled submit during async operations, and form state reset on modal open/close.
+**The Firestore Trigger pattern:** Some operations (invites, org setup, user management) need elevated permissions. Instead of calling Cloud Functions directly (which was blocked by Google Cloud org policies — see [Bugs Caught & Fixed](#bugs-caught--fixed)), the client writes a "request" document to a special collection. A server-side trigger picks it up, executes the operation with full admin access, and writes the result back. The client watches for the result in real-time.
 
 ---
 
 ## Invoice Generation Flow
 
 ```
-1. User selects Company + Member (payee)
+1. User selects a Company + Member (payee)
          │
-2. Form auto-populates:
-   ├── Warehouse address, area, rate from Company
-   ├── Recipient / sender / CC / BCC from Email Mappings
-   ├── Invoice number (INV-NNN, auto-incremented)
+2. Form auto-fills everything:
+   ├── Warehouse address, area, rate (from contract)
+   ├── Email recipients (from mappings)
+   ├── Invoice number (auto-incremented)
    └── GST type (auto-detected from state codes)
          │
-3. Computed fields:
-   ├── Base Amount = area × rate
-   ├── GST Amount = base × 18%
-   ├── Total Payable = base + GST
-   └── Due Date = next month + rent_due_day
+3. Amounts computed automatically:
+   ├── Base Rent = area × rate
+   ├── GST = base × 18%
+   └── Total = base + GST
          │
 4. User clicks "Generate & Send"
          │
-5. Client generates PDF via jsPDF
+5. PDF generated in the browser → uploaded to storage
          │
-6. PDF uploaded to Firebase Storage
+6. Cloud Function emails it to the tenant (PDF attached)
          │
-7. Cloud Function sends email via Resend (PDF attached)
-         │
-8. Invoice saved to Firestore (status: "Sent")
-         │
-9. Redirect to Invoice History
+7. Invoice logged with status "Sent"
 ```
 
 ---
@@ -203,7 +177,7 @@ Company-to-email mapping configuration: sender email, recipient email, CC, and B
    │ Pending  │ ← Payment reminder sent
    └────┬─────┘
         │
-        │  (tenant pays → landlord logs payment)
+        │  (tenant pays → landlord confirms)
         ▼
    ┌─────────┐
    │  Paid   │ ← TDS reconciled: received + TDS = total
@@ -212,23 +186,69 @@ Company-to-email mapping configuration: sender email, recipient email, CC, and B
 
 ---
 
+## Bugs Caught & Fixed
+
+Real bugs I found and fixed during development and dogfooding. These aren't theoretical — each one was discovered by actually using the app end-to-end.
+
+### Auth Race Condition — New Users Stuck on Setup Page
+
+**What happened:** I invited a new user (amaan@oltaflock.ai) from the admin account. The invite email arrived, they clicked the link, created their account, signed in — and landed on the "Initialize Organization" setup page. The organization was already set up. They shouldn't have seen that page at all.
+
+**Why it happened:** When a user accepts an invite, two things happen almost simultaneously:
+1. Their login account is created (instant)
+2. Their user profile is created in the database (takes a moment — goes through a server-side trigger)
+
+The app checks for the user profile immediately after the account is created. Since the profile hasn't been written yet (the trigger is still processing), the app thinks this user has no profile and redirects them to the setup page — which is only meant for the very first admin bootstrapping a brand new organization.
+
+**Was it a security risk?** No — the setup page's server-side function is locked to a single admin email, so no one else could actually re-initialize the organization. But it was a confusing dead-end for every new user.
+
+**How I fixed it:**
+- Added a `refreshProfile()` method so the app can re-check the database after the invite is fully processed, instead of relying on the one-shot check at login
+- The invite acceptance flow now waits for the profile to be created, *then* refreshes — so by the time the user is redirected, their profile is loaded
+- The setup page now shows a helpful "Account Setup Pending" message with a refresh button for non-admin users, instead of the misleading org initialization form
+
+### Cloud Functions Blocked by Google Cloud Org Policies
+
+**What happened:** All Cloud Function calls from the frontend returned "Missing or insufficient permissions" — even for logged-in users with valid roles.
+
+**Why:** Google Cloud's "Domain Restricted Sharing" org policy was blocking direct function calls from the browser. This is a policy set at the organization level, not something you can fix in your own project settings.
+
+**How I fixed it:** Replaced direct function calls with a **write-trigger pattern**. Instead of calling a function, the client writes a request to a special database collection. A server-side trigger (which runs as a service account not affected by the policy) picks it up and processes it. The client watches for the result in real-time. Same end result, no IAM issues.
+
+### First-Time Setup Chicken-and-Egg Problem
+
+**What happened:** The very first user couldn't set up the organization because the database security rules required a user profile to exist — but the user profile couldn't be created until the organization existed.
+
+**How I fixed it:** The setup operation runs through the same server-side trigger pattern, which uses admin-level access to bypass security rules. This lets it create both the organization and the first user profile in a single atomic operation.
+
+### Edit Forms Opening Blank
+
+**What happened:** Clicking "Edit" on a company, member, or email mapping opened the form with empty fields instead of pre-filled with the current data.
+
+**Why:** The forms initialized their state once when first rendered. When you opened the modal for a different item, the form didn't know the data had changed.
+
+**How I fixed it:** Reset the form state every time the modal opens, using the selected item's current data.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology | Why |
 |---|---|---|
-| **Frontend** | React 18 + TypeScript | Type safety across the full component tree, hooks-based architecture |
-| **Build** | Vite | Sub-second HMR, fast production builds |
-| **Styling** | Tailwind CSS + shadcn/ui | Utility-first CSS with accessible Radix primitives, HSL theming with dark mode |
-| **Data Fetching** | TanStack React Query | Server state management with caching, background sync, and mutation invalidation |
-| **Forms** | React Hook Form + Zod | Performant forms (no re-renders on input) with schema-based validation |
+| **Frontend** | React 18 + TypeScript | Type safety, hooks-based architecture |
+| **Build** | Vite | Sub-second hot reload, fast production builds |
+| **Styling** | Tailwind CSS + shadcn/ui | Utility CSS with accessible UI primitives and dark mode |
+| **Data** | TanStack React Query | Caching, background sync, automatic UI updates on mutations |
+| **Forms** | React Hook Form + Zod | Performant forms with schema-based validation |
 | **PDF** | jsPDF + jspdf-autotable | Client-side PDF generation — no server dependency |
-| **Charts** | Recharts | Composable chart components for the revenue dashboard |
-| **Database** | Cloud Firestore | Real-time NoSQL with offline support and automatic scaling |
-| **File Storage** | Firebase Storage | Stores generated invoice PDFs |
-| **Serverless** | Firebase Cloud Functions (Node 22) | Email delivery, invite management, org bootstrap via Firestore triggers |
-| **Email** | Resend | Transactional email API with PDF attachments, called from Cloud Functions |
-| **Auth** | Firebase Authentication | Email/password, invite-only signup, role-based access |
-| **Routing** | React Router v6 | Declarative client-side routing with 12 routes |
+| **Charts** | Recharts | Revenue dashboard chart |
+| **Database** | Cloud Firestore | Real-time NoSQL with automatic scaling |
+| **Storage** | Firebase Storage | Invoice PDF files |
+| **Serverless** | Firebase Cloud Functions (Node 22) | Email delivery, invites, org setup via Firestore triggers |
+| **Email** | Resend | Transactional emails with PDF attachments |
+| **Auth** | Firebase Authentication | Email/password, invite-only, role-based access |
+| **Routing** | React Router v6 | 12 client-side routes |
+| **Deployment** | Vercel (frontend) + Firebase (backend) | |
 
 ---
 
@@ -239,31 +259,28 @@ Company-to-email mapping configuration: sender email, recipient email, CC, and B
 company_name, signing_authority, gst_number, registered_address,
 warehouse_location, area_sqft, rate_per_sqft, monthly_base_rent,
 possession_date, annual_increment, next_increment_date,
-invoice_send_day, rent_due_day, reminder_buffer_days,
-created_at, updated_at
+invoice_send_day, rent_due_day, reminder_buffer_days
 ```
 
 ### `members` — Landlord / Payee Profiles
 ```
 member_type ("company" | "individual"), name, address, gst_number,
-bank_name, branch, ifsc_code, account_number,
-created_at, updated_at
+bank_name, branch, ifsc_code, account_number
 ```
 
 ### `invoices` — Invoice Records + Payment Tracking
 ```
 invoice_number, invoice_period, company, member_id,
-base_amount, gst_type ("IGST" | "CGST+SGST"), gst_rate, gst_amount, total_amount,
+base_amount, gst_type, gst_rate, gst_amount, total_amount,
 due_date, status ("Sent" | "Pending" | "Paid" | "Failed"),
 recipient_email, sender_email, cc, bcc, file_name,
 reminder_sent_at, payment_received, tds_amount, receipt_date,
-bank_received_into, confirmed_at, created_at
+bank_received_into, confirmed_at
 ```
 
 ### `email_mappings` — Company-to-Email Routing
 ```
-company, sender_email, primary_email, cc, bcc,
-created_at, updated_at
+company, sender_email, primary_email, cc, bcc
 ```
 
 ---
@@ -277,36 +294,36 @@ src/
 │   ├── AcceptInvite.tsx         # Invite acceptance + account creation
 │   ├── Setup.tsx                # One-time org bootstrap (admin only)
 │   ├── Index.tsx                # Dashboard — KPIs, revenue chart, recent invoices
-│   ├── Companies.tsx            # Tenant contract CRUD (13 fields, Firestore-persisted)
+│   ├── Companies.tsx            # Tenant contract CRUD (13 fields)
 │   ├── Members.tsx              # Landlord/payee profiles with bank details
-│   ├── InvoiceGenerator.tsx     # Form → PDF → upload → email → Firestore pipeline
-│   ├── InvoiceHistory.tsx       # Searchable invoice audit log with status filters
-│   ├── PaymentReminder.tsx      # Time-locked reminder sends with overdue tracking
+│   ├── InvoiceGenerator.tsx     # Form → PDF → email → log pipeline
+│   ├── InvoiceHistory.tsx       # Searchable invoice audit log
+│   ├── PaymentReminder.tsx      # Time-locked reminder sends
 │   ├── PaymentConfirmation.tsx  # TDS reconciliation and payment logging
 │   ├── Settings.tsx             # Email mapping configuration
-│   └── TeamManagement.tsx       # Invite users, manage team access (admin only)
+│   └── TeamManagement.tsx       # Invite users, manage team (admin only)
 ├── contexts/
-│   └── AuthContext.tsx           # Firebase Auth provider + user profile loading
+│   └── AuthContext.tsx           # Auth provider + user profile management
 ├── components/
-│   ├── AppSidebar.tsx           # Collapsible sidebar navigation
-│   ├── DashboardLayout.tsx      # Page wrapper with sidebar
+│   ├── AppSidebar.tsx           # Navigation sidebar
+│   ├── DashboardLayout.tsx      # Page wrapper
 │   ├── ProtectedRoute.tsx       # Auth-required route guard
 │   ├── AdminRoute.tsx           # Admin-role route guard
-│   └── ui/                      # shadcn/ui primitives (Radix-based)
+│   └── ui/                      # shadcn/ui primitives
 ├── hooks/
-│   ├── use-companies.ts         # Firestore CRUD hooks for companies
-│   ├── use-members.ts           # Firestore CRUD hooks for members
-│   ├── use-invoices.ts          # Invoice queries + status update mutations
+│   ├── use-companies.ts         # Company CRUD hooks
+│   ├── use-members.ts           # Member CRUD hooks
+│   ├── use-invoices.ts          # Invoice queries + mutations
 │   ├── use-email-mappings.ts    # Email mapping CRUD hooks
 │   ├── use-invites.ts           # Invite management hooks
 │   └── use-users.ts             # User management hooks
 ├── lib/
-│   └── request-client.ts        # _requests write-trigger client (submitRequest)
+│   └── request-client.ts        # Firestore trigger request client
 ├── integrations/firebase/
-│   ├── config.ts                # Firebase SDK initialization
-│   └── types.ts                 # TypeScript interfaces for all collections
+│   ├── config.ts                # Firebase SDK config
+│   └── types.ts                 # TypeScript interfaces
 functions/
-└── src/index.ts                 # Cloud Functions: email, invites, org setup (trigger-based)
+└── src/index.ts                 # Cloud Functions (trigger-based)
 ```
 
 ---
@@ -322,7 +339,6 @@ functions/
 ### Installation
 
 ```bash
-# Clone and install
 git clone https://github.com/Oltaflock-AI/godown-ai.git
 cd godown-ai
 npm install
@@ -338,11 +354,10 @@ cp .env.example .env
 ### Firebase Setup
 
 ```bash
-# Login and select project
 firebase login
 firebase use <your-project-id>
 
-# Set the Resend API key as a secret (used by Cloud Functions)
+# Set the Resend API key (used by Cloud Functions for email)
 firebase functions:secrets:set RESEND_API_KEY
 
 # Deploy Cloud Functions
@@ -355,10 +370,10 @@ firebase deploy --only functions
 npm run dev    # Frontend at http://localhost:8080
 ```
 
-### Deploy to Vercel
+### Deploy
 
 ```bash
-# Connect your GitHub repo to Vercel, then:
+# Connect your GitHub repo to Vercel:
 # - Framework Preset: Vite
 # - Build Command: npm run build
 # - Output Directory: dist
@@ -379,8 +394,6 @@ npm run dev    # Frontend at http://localhost:8080
 
 Cloud Functions use `RESEND_API_KEY` via Firebase secret management (not `.env`).
 
-> **Note:** Invite and system emails currently send from `onboarding@resend.dev` (Resend's test sender) because the `oltaflock.ai` domain is not yet verified in Resend. Once domain DNS records are added and verified in the [Resend dashboard](https://resend.com/domains), update `INVITE_SENDER_EMAIL` in `functions/src/index.ts` back to `admin@oltaflock.ai`.
-
 ### Scripts
 
 | Command | Description |
@@ -399,54 +412,23 @@ Cloud Functions use `RESEND_API_KEY` via Firebase secret management (not `.env`)
 
 ### Invite-Only Signup
 
-Users cannot self-register. An admin creates an invite from the Team Management page, which generates a secure token, stores its SHA-256 hash in Firestore, and emails the invite link via Resend. The recipient clicks the link, creates a Firebase Auth account, and the Cloud Function validates the token, creates the Firestore user profile, and marks the invite as accepted.
+Users cannot self-register. An admin sends an invite from the Team Management page, which generates a secure token, stores its hash in the database, and emails a sign-up link. The recipient clicks the link, creates their account, and the server validates the token before activating the profile.
 
 ### Role-Based Access Control
 
-Three roles: **admin**, **manager**, **member**. Enforced at three layers:
-1. **Firestore rules** — role checks on every read/write (e.g., only active users access business data, only admins read invites)
-2. **Cloud Functions** — `requireRole()` checks on all privileged operations
-3. **Frontend routes** — `ProtectedRoute` (auth required) and `AdminRoute` (admin role required) wrappers
+Three roles with enforcement at every layer:
+
+| Role | Can do |
+|---|---|
+| **Admin** | Everything — manage team, invite/revoke users, all business operations |
+| **Manager** | Manage companies, members, email settings, generate & send invoices, send reminders, confirm payments |
+| **Member** | View-only access to dashboard, companies, members, invoice history, and payment status |
+
+Access is enforced in the database rules, on the server, and in the frontend routing.
 
 ### Organization Bootstrap
 
-First-time setup is restricted to `admin@oltaflock.ai`. The Setup page writes to `_requests`, which triggers the `initializeOrganization` Cloud Function handler. The function creates the organization doc and admin user profile using the Admin SDK (bypassing Firestore security rules). This avoids the chicken-and-egg problem where security rules require a user doc that doesn't exist yet.
-
-### Firestore Security Rules
-
-- `organizations`: bootstrap admin can create; active users read own org only
-- `users`: bootstrap admin can create own doc; users can read own doc or same-org docs
-- `invites`: admin read only; writes managed exclusively by Cloud Functions
-- `_requests`: authenticated users can create (with own userId + pending status) and read own requests; no client updates
-- Business data (`companies`, `members`, `invoices`, `email_mappings`): active authenticated users only
-
----
-
-## Engineering Challenges Solved
-
-### Cloud Run IAM / Domain Restricted Sharing Blocking `onCall` Functions
-
-Google Cloud org policies (Domain Restricted Sharing) prevented unauthenticated invocations of `onCall` Cloud Functions, causing "Missing or insufficient permissions" errors even for authenticated users. Solved by replacing `onCall` with a **Firestore write-trigger pattern**: the client writes a request to `_requests/{id}`, the `processRequests` trigger (which runs as a service account unaffected by IAM restrictions) processes it with the Admin SDK, and writes the result back. The client listens via `onSnapshot` for completion.
-
-### Organization Setup Permissions
-
-The Setup page originally wrote directly to Firestore from the client, but Firestore security rules use `get()` to check the caller's user document — which doesn't exist yet during first-time setup. Moving the initialization to the `_requests` trigger pattern resolved this: the Cloud Function uses the Admin SDK which bypasses security rules entirely.
-
-### Shipping Updated Cloud Functions
-
-Deploys kept serving the old `parseInvoice` function even though the code had been rewritten to `sendInvoice` / `sendPaymentReminder`. Root cause: the deploy pipeline reads compiled output (`functions/lib/`), which hadn't been rebuilt. Rebuilding before deploy fixed it.
-
-### IAM / Build Permissions on Cloud Functions Deploy
-
-Deploys failed with "missing permission on the build service account" despite being a project owner. Traced to Cloud Build service-account policy changes — enabled the required API and granted the correct IAM roles.
-
-### Edit Modals Not Pre-Filling
-
-Companies/Members/Settings edit modals opened with empty fields. The modal forms were initialized once on mount; switching between items didn't re-sync form state. Fixed by resetting form state on modal open with the selected item's data.
-
-### Best-Effort Status Updates
-
-Reminder emails could succeed but the server-side Firestore status update could fail due to runtime permissions, making the whole action appear failed. Made the status update best-effort (log on failure, don't block the email). The client updates status independently.
+First-time setup is restricted to a single designated admin email. The setup function creates both the organization and the admin profile in one atomic operation, solving the chicken-and-egg problem where security rules require a user profile that doesn't exist yet.
 
 ---
 
@@ -455,21 +437,22 @@ Reminder emails could succeed but the server-side Firestore status update could 
 | Aspect | v1 | v2 |
 |---|---|---|
 | **Core flow** | Upload PDF → AI extracts data → log | Configure contracts → generate → email → track |
-| **AI dependency** | OpenAI GPT-4o per invoice | None — deterministic computation |
-| **PDF handling** | Upload existing | Generate new (client-side jsPDF) |
+| **AI dependency** | OpenAI GPT-4o per invoice | None — deterministic |
+| **PDF** | Upload existing | Generate in browser |
 | **GST** | Not handled | Auto-detected from state codes |
 | **Payment tracking** | None | Full lifecycle with TDS reconciliation |
-| **Companies** | 3 fields, local state | 13 fields, Firestore-persisted |
+| **Companies** | 3 fields | 13 fields |
 | **Members** | Name only | 8 fields with bank details |
-| **Email** | Manual | Automated via Resend with PDF attachment |
-| **Cost per invoice** | ~$0.03 (GPT-4o call) | $0.00 |
+| **Email** | Manual | Automated with PDF attachment |
+| **Cost per invoice** | ~$0.03 (GPT-4o) | $0.00 |
 
 ---
 
 ## Roadmap
 
 - [x] Firebase Authentication with invite-only signup and role-based access
-- [ ] Automatic rent increment notifications based on `next_increment_date`
+- [x] Auth race condition fix for invited users
+- [ ] Automatic rent increment notifications based on contract dates
 - [ ] Email template customization
 - [ ] Multi-warehouse / multi-landlord support
 - [ ] Bulk invoice generation (all companies in one click)
