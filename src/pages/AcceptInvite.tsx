@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/integrations/firebase/config";
 import { submitRequest } from "@/lib/request-client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ export default function AcceptInvite() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
 
   if (!token || !email) {
     return (
@@ -68,6 +70,9 @@ export default function AcceptInvite() {
         { token, email, fullName },
         cred.user.uid
       );
+
+      // 3. Refresh profile so AuthContext picks up the new user doc
+      await refreshProfile();
 
       setSuccess(true);
       setTimeout(() => navigate("/"), 1500);

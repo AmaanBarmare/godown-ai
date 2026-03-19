@@ -17,33 +17,53 @@ export default function Setup() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
-  const { user } = useAuth();
+  const { user, userProfile, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
-  // Check if org already exists — if so, initialize via Cloud Function to create missing profile
+  // If profile is already loaded (e.g., late arrival), redirect to dashboard
+  useEffect(() => {
+    if (userProfile) {
+      navigate("/", { replace: true });
+    }
+  }, [userProfile, navigate]);
+
+  // Try to refresh profile first — if user doc exists (created by invite flow),
+  // AuthContext will pick it up and ProtectedRoute will let them through
   useEffect(() => {
     if (!user) {
       setChecking(false);
       return;
     }
 
-    async function checkAndFixProfile() {
+    async function checkProfile() {
       try {
-        // Try initializing — the Cloud Function handles the "already exists" case
-        // by creating the missing user profile if needed
-        await submitRequest("initializeOrganization", { orgName: "OltaFlock Warehousing LLP" }, user!.uid);
-        toast.success("Profile created! Redirecting...");
-        window.location.href = "/";
-        return;
+        // First, try refreshing profile — the user doc may already exist
+        await refreshProfile();
+        // If refreshProfile set the profile, the useEffect above will redirect
+        // Give it a tick to propagate
+        await new Promise((r) => setTimeout(r, 100));
       } catch {
-        // If it fails, show the setup form (e.g., org doesn't exist yet)
-      } finally {
-        setChecking(false);
+        // ignore
       }
+
+      // If still no profile and this is the primary admin, try initializing
+      if (user!.email === ADMIN_EMAIL) {
+        try {
+          await submitRequest("initializeOrganization", { orgName: "OltaFlock Warehousing LLP" }, user!.uid);
+          toast.success("Profile created! Redirecting...");
+          await refreshProfile();
+          navigate("/", { replace: true });
+          return;
+        } catch {
+          // Org doesn't exist yet — show the setup form
+        }
+      }
+
+      setChecking(false);
     }
 
-    checkAndFixProfile();
-  }, [user, navigate]);
+    checkProfile();
+  }, [user]);
 
   if (checking) {
     return (
@@ -63,6 +83,33 @@ export default function Setup() {
             </p>
             <Button className="mt-4" onClick={() => navigate("/login")}>
               Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Non-admin users should not see the setup form
+  if (user.email !== ADMIN_EMAIL) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+              <AlertCircle className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <CardTitle className="text-2xl">Account Setup Pending</CardTitle>
+            <CardDescription>
+              Your account is being set up. Please try refreshing the page, or contact your organization admin if the issue persists.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <Button onClick={() => window.location.reload()}>
+              Refresh Page
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/login")}>
+              Back to Login
             </Button>
           </CardContent>
         </Card>

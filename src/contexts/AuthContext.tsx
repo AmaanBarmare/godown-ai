@@ -15,6 +15,7 @@ interface AuthContextValue {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -68,8 +69,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserProfile(null);
   };
 
+  const refreshProfile = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    try {
+      const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+      if (userDoc.exists()) {
+        const profile = { id: userDoc.id, ...userDoc.data() } as AppUser;
+        if (profile.status === "disabled") {
+          await firebaseSignOut(auth);
+          setUser(null);
+          setUserProfile(null);
+        } else {
+          setUserProfile(profile);
+        }
+      }
+    } catch {
+      // ignore — profile may not exist yet
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, signIn, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
