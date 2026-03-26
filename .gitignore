@@ -48,6 +48,20 @@ firebase-debug.log
 service-account.json
 functions/lib/
 
+# Secrets / credentials (never commit)
+.runtimeconfig.json
+**/serviceAccount*.json
+**/*service-account*.json
+**/*credentials*.json
+**/*secret*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+
 # Functions dependencies (installed separately)
 functions/node_modules
 .vercel
