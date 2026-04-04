@@ -15,8 +15,8 @@ import { useInvoices, useAddInvoice } from "@/hooks/use-invoices";
 import { storage, db } from "@/integrations/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/integrations/firebase/config";
+import { submitRequest } from "@/lib/request-client";
+import { useAuth } from "@/contexts/AuthContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Company } from "@/integrations/firebase/types";
@@ -43,6 +43,7 @@ const months = [
 export default function InvoiceGenerator() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { data: companies = [] } = useCompanies();
   const { data: members = [] } = useMembers();
   const { data: emailMappings = [] } = useEmailMappings();
@@ -231,9 +232,8 @@ export default function InvoiceGenerator() {
       const storageRef = ref(storage, filePath);
       await uploadBytes(storageRef, pdfBlob);
 
-      // Call Cloud Function to send email
-      const sendInvoice = httpsCallable(functions, "sendInvoice");
-      await sendInvoice({
+      // Send email via Firestore trigger (avoids CORS/org policy issues)
+      await submitRequest("sendInvoice", {
         invoiceData: {
           invoice_number: invoiceNumber,
           invoice_period: invoicePeriod,
@@ -250,7 +250,7 @@ export default function InvoiceGenerator() {
         senderEmail,
         cc,
         bcc,
-      });
+      }, user!.uid, 60000);
 
       // Save invoice to Firestore
       await addInvoice.mutateAsync({

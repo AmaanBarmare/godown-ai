@@ -3,8 +3,8 @@ import { useInvoices, useUpdateInvoiceStatus } from "@/hooks/use-invoices";
 import { useCompanies } from "@/hooks/use-companies";
 import { useEmailMappings } from "@/hooks/use-email-mappings";
 import { useToast } from "@/hooks/use-toast";
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/integrations/firebase/config";
+import { submitRequest } from "@/lib/request-client";
+import { useAuth } from "@/contexts/AuthContext";
 import { format, differenceInDays } from "date-fns";
 import { useState } from "react";
 
@@ -14,6 +14,7 @@ export default function PaymentReminder() {
   const { data: emailMappings = [] } = useEmailMappings();
   const updateStatus = useUpdateInvoiceStatus();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [sendingId, setSendingId] = useState<string | null>(null);
 
   const today = new Date();
@@ -56,8 +57,7 @@ export default function PaymentReminder() {
         (m) => m.company.toLowerCase() === inv.company.toLowerCase()
       );
 
-      const sendPaymentReminder = httpsCallable(functions, "sendPaymentReminder");
-      await sendPaymentReminder({
+      await submitRequest("sendPaymentReminder", {
         invoiceId: inv.id,
         recipientEmail: inv.recipient_email,
         senderEmail: inv.sender_email || mapping?.sender_email || "",
@@ -65,7 +65,7 @@ export default function PaymentReminder() {
         amount: inv.total_amount,
         dueDate: inv.due_date,
         companyName: inv.company,
-      });
+      }, user!.uid, 30000);
 
       await updateStatus.mutateAsync({
         id: inv.id,

@@ -224,6 +224,12 @@ export const processRequests = onDocumentCreated(
         case "initializeOrganization":
           result = await handleInitializeOrganization(data, userId);
           break;
+        case "sendInvoice":
+          result = await handleSendInvoice(data, userId);
+          break;
+        case "sendPaymentReminder":
+          result = await handleSendPaymentReminder(data, userId);
+          break;
         default:
           throw new Error(`Unknown request type: ${type}`);
       }
@@ -525,6 +531,89 @@ async function handleInitializeOrganization(
   await admin.auth().updateUser(userId, { displayName: "Admin" });
 
   return { success: true, organizationId: orgRef.id };
+}
+
+async function handleSendInvoice(
+  data: Record<string, any>,
+  userId: string
+): Promise<Record<string, any>> {
+  await requireRole(userId, ["admin", "manager"]);
+
+  const { invoiceData, filePath, recipientEmail, senderEmail, cc, bcc } = data;
+
+  if (!filePath || !recipientEmail) {
+    throw new Error("filePath and recipientEmail are required");
+  }
+
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(filePath);
+  const [buffer] = await file.download();
+
+  const resend = getResend();
+
+  await resend.emails.send({
+    from: senderEmail || "invoices@example.com",
+    to: [recipientEmail],
+    cc: cc ? [cc] : undefined,
+    bcc: bcc ? [bcc] : undefined,
+    subject: `Invoice ${invoiceData.invoice_number} - ${invoiceData.invoice_period}`,
+    html: `
+      <p>Dear ${invoiceData.company},</p>
+      <p>Please find attached invoice <strong>${invoiceData.invoice_number}</strong> for the period of <strong>${invoiceData.invoice_period}</strong>.</p>
+      <p>Amount: <strong>₹${invoiceData.total_amount.toLocaleString("en-IN")}</strong></p>
+      <p>Due Date: <strong>${invoiceData.due_date}</strong></p>
+      <p>Please process the payment at your earliest convenience.</p>
+      <p>Best regards,<br/>Warehouse Rentals</p>
+    `,
+    attachments: [
+      {
+        filename: `${invoiceData.invoice_number}.pdf`,
+        content: buffer.toString("base64"),
+      },
+    ],
+  });
+
+  return { success: true };
+}
+
+async function handleSendPaymentReminder(
+  data: Record<string, any>,
+  userId: string
+): Promise<Record<string, any>> {
+  await requireRole(userId, ["admin", "manager"]);
+
+  const { invoiceId, recipientEmail, senderEmail, invoiceNumber, amount, dueDate, companyName } = data;
+
+  if (!invoiceId || !recipientEmail) {
+    throw new Error("invoiceId and recipientEmail are required");
+  }
+
+  const resend = getResend();
+
+  await resend.emails.send({
+    from: senderEmail || "invoices@example.com",
+    to: [recipientEmail],
+    subject: `Payment Reminder: Invoice ${invoiceNumber}`,
+    html: `
+      <p>Dear ${companyName},</p>
+      <p>This is a friendly reminder that payment for invoice <strong>${invoiceNumber}</strong> is overdue.</p>
+      <p>Amount Due: <strong>₹${amount.toLocaleString("en-IN")}</strong></p>
+      <p>Original Due Date: <strong>${dueDate}</strong></p>
+      <p>Please process the payment at your earliest convenience.</p>
+      <p>Best regards,<br/>Warehouse Rentals</p>
+    `,
+  });
+
+  try {
+    await admin.firestore().collection("invoices").doc(invoiceId).update({
+      status: "Pending",
+      reminder_sent_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("handleSendPaymentReminder: failed to update invoice status:", err);
+  }
+
+  return { success: true };
 }
 
 async function handleUpdateUserStatus(
