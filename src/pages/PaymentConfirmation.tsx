@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { X, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -33,30 +32,29 @@ function PaymentModal({
 }) {
   const [amountReceived, setAmountReceived] = useState(0);
   const [tdsAmount, setTdsAmount] = useState(0);
+  const [totalReconciled, setTotalReconciled] = useState(0);
   const [receiptDate, setReceiptDate] = useState<Date>(new Date());
   const [bankReceivedInto, setBankReceivedInto] = useState(defaultBank);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setAmountReceived(0);
     setTdsAmount(0);
+    setTotalReconciled(0);
     setReceiptDate(new Date());
     setBankReceivedInto(defaultBank);
-    setError("");
   }, [open, invoice.id, defaultBank]);
+
+  // Auto-update total when sub-fields change, but user can still override
+  useEffect(() => {
+    setTotalReconciled(amountReceived + tdsAmount);
+  }, [amountReceived, tdsAmount]);
 
   if (!open) return null;
 
-  const totalReconciled = amountReceived + tdsAmount;
-  const reconciles = totalReconciled === (invoice.total_amount || 0);
+  const matchesInvoice = totalReconciled === (invoice.total_amount || 0);
 
   const handleConfirm = () => {
-    if (!reconciles) {
-      setError(`Amount received (₹${amountReceived.toLocaleString("en-IN")}) + TDS (₹${tdsAmount.toLocaleString("en-IN")}) = ₹${totalReconciled.toLocaleString("en-IN")} does not match invoice total ₹${(invoice.total_amount || 0).toLocaleString("en-IN")}`);
-      return;
-    }
-    setError("");
     onConfirm({
       payment_received: amountReceived,
       tds_amount: tdsAmount,
@@ -89,7 +87,7 @@ function PaymentModal({
             <input
               type="number"
               value={amountReceived || ""}
-              onChange={(e) => { setAmountReceived(Number(e.target.value)); setError(""); }}
+              onChange={(e) => setAmountReceived(Number(e.target.value))}
               className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -100,16 +98,23 @@ function PaymentModal({
             <input
               type="number"
               value={tdsAmount || ""}
-              onChange={(e) => { setTdsAmount(Number(e.target.value)); setError(""); }}
+              onChange={(e) => setTdsAmount(Number(e.target.value))}
               className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Total Reconciled</label>
-            <div className={`w-full px-3 py-2.5 rounded-lg border text-sm font-semibold ${reconciles ? "border-success/50 bg-success/5 text-success" : "border-destructive/50 bg-destructive/5 text-destructive"}`}>
-              ₹{totalReconciled.toLocaleString("en-IN")}
-              {reconciles ? " ✓ Matches" : ` ≠ ₹${(invoice.total_amount || 0).toLocaleString("en-IN")}`}
-            </div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Total Reconciled (₹)</label>
+            <input
+              type="number"
+              value={totalReconciled || ""}
+              onChange={(e) => setTotalReconciled(Number(e.target.value))}
+              className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <p className={`text-xs mt-1 ${matchesInvoice ? "text-success" : "text-muted-foreground"}`}>
+              {matchesInvoice
+                ? "✓ Matches invoice total"
+                : `Invoice total: ₹${(invoice.total_amount || 0).toLocaleString("en-IN")}`}
+            </p>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Date of Receipt</label>
@@ -134,7 +139,6 @@ function PaymentModal({
               className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted">
@@ -142,7 +146,7 @@ function PaymentModal({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={confirming || !reconciles}
+            disabled={confirming}
             className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
             {confirming ? "Confirming..." : "Confirm Payment"}

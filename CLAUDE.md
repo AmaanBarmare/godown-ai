@@ -117,6 +117,10 @@ All called from the client via `httpsCallable()`. Firebase SDK automatically att
 - Admin email for Oltaflock Warehousing LLP: `admin@oltaflock.ai`
 - See `docs/auth-invite-architecture.md` for full architecture documentation
 
+### Working Principle
+
+Do not make a change unless you are highly confident it is correct. If there is genuine uncertainty about the right approach — whether the logic is correct, whether it could break something, or whether it matches the intent — stop and clarify before proceeding. Speculation that gets committed is harder to undo than a question asked upfront.
+
 ### Currency
 All monetary values use INR (₹).
 

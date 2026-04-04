@@ -70,7 +70,11 @@ Each tenant has a configurable buffer period. The "Send Reminder" button stays d
 
 ### TDS Reconciliation
 
-Indian tenants deduct tax (TDS) before paying. The payment confirmation screen enforces a hard rule: `amount received + TDS deducted = invoice total`. If the numbers don't balance to the rupee, the form won't submit. Both values are stored separately for accounting.
+Indian tenants deduct tax (TDS) before paying. The payment confirmation screen lets the landlord log three things: the amount of cash actually received, the TDS amount the tenant deducted, and a total reconciled figure.
+
+All three fields are manually editable. The total auto-fills as you type (amount + TDS), but you can override it freely. The form saves regardless of whether the numbers add up to the original invoice total — no hard enforcement.
+
+**Why remove the strict math check?** The original rule assumed every payment would be clean: tenant pays the full amount minus exactly the expected TDS. In practice that doesn't hold. Tenants make partial payments, apply deductions that weren't on the original invoice, or pay in installments. The old system just blocked the landlord from recording what actually happened. The new approach gives the landlord full control to log the payment exactly as received, while still showing the invoice total as a reference point.
 
 ---
 
@@ -84,7 +88,7 @@ Indian tenants deduct tax (TDS) before paying. The payment confirmation screen e
 | **Invoice Generator** | Select a company and member → all fields auto-fill → one click generates PDF, emails it, and logs it |
 | **Invoice History** | Searchable audit log of all invoices, filterable by status (Sent, Pending, Paid, Failed) |
 | **Payment Reminder** | Shows unpaid invoices with days overdue. Time-locked send buttons that unlock after the buffer period |
-| **Payment Confirmation** | TDS reconciliation — log the amount received, TDS deducted, and receiving bank. Validates the math before saving |
+| **Payment Confirmation** | TDS reconciliation — log the amount received, TDS deducted, and receiving bank. All fields are manually editable; saves regardless of whether the numbers match the invoice total |
 | **Email Settings** | Map each company to sender, recipient, CC, and BCC emails that auto-fill in the Invoice Generator |
 | **Team Management** | Invite-only signup with role-based access (admin, manager, member) |
 
@@ -180,7 +184,7 @@ Indian tenants deduct tax (TDS) before paying. The payment confirmation screen e
         │  (tenant pays → landlord confirms)
         ▼
    ┌─────────┐
-   │  Paid   │ ← TDS reconciled: received + TDS = total
+   │  Paid   │ ← TDS reconciled: amount received + TDS logged
    └─────────┘
 ```
 
@@ -247,6 +251,16 @@ The app checks for the user profile immediately after the account is created. Si
 **What happened:** The very first user couldn't set up the organization because the database security rules required a user profile to exist — but the user profile couldn't be created until the organization existed.
 
 **How I fixed it:** The setup operation runs through the same server-side trigger pattern, which uses admin-level access to bypass security rules. This lets it create both the organization and the first user profile in a single atomic operation.
+
+### Payment Confirmation Was Too Strict to Use in the Real World
+
+**What happened:** The payment confirmation screen blocked the landlord from saving unless the amount received plus the TDS amount added up exactly to the invoice total. In theory, that's the right math. In practice, it made the screen unusable.
+
+**Why it was wrong:** Real payments are messy. Tenants sometimes pay in partial instalments. They apply deductions that weren't on the original invoice. They short-pay for reasons that need to be documented and sorted out later. The old rule assumed every payment would be clean and complete — which almost never happens.
+
+**What changed:** All three fields — amount received, TDS deducted, and total reconciled — are now freely editable. The total still auto-fills as you type so there's no extra work in the common case, but you can override it. The form saves in any state. The invoice total is shown as a reference point, not a hard gate.
+
+**The takeaway:** Validation that exists to enforce business rules is good. Validation that prevents users from recording what actually happened is just friction. The job of this screen is to log payments accurately, not to enforce an assumption that may not be true.
 
 ### Edit Forms Opening Blank
 
@@ -481,6 +495,7 @@ First-time setup is restricted to a single designated admin email. The setup fun
 - [x] Firebase Authentication with invite-only signup and role-based access
 - [x] Auth race condition fix for invited users
 - [x] Scheduled auto-send invoices (daily at 9 AM IST)
+- [x] Flexible payment confirmation — all fields manually editable, no strict math enforcement
 - [ ] Automatic rent increment notifications based on contract dates
 - [ ] Email template customization
 - [ ] Multi-warehouse / multi-landlord support
